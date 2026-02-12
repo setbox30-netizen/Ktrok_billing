@@ -9,6 +9,7 @@ import { CollectorList } from './components/CollectorList';
 import { RouterList } from './components/RouterList';
 import { CustomerPortal } from './components/CustomerPortal';
 import { AdminSettings } from './components/AdminSettings';
+import { CollectorProfile } from './components/CollectorProfile';
 import { PaymentSettings } from './components/PaymentSettings';
 import { LandingPage } from './components/LandingPage';
 import { Customer, Package, Bill, View, Status, BillStatus, Router, MikrotikUser, AdminProfile, PaymentAccount, PaymentGatewayConfig, Collector } from './types';
@@ -109,19 +110,15 @@ const App: React.FC = () => {
   }, [syncData]);
 
   const handleLogin = (u: string, p: string): boolean => {
-    // 1. Admin Login Check
     if (u === adminProfile.username && p === (adminProfile.password || 'admin123')) {
         setIsAdminLoggedIn(true);
         localStorage.setItem(ADMIN_SESSION_KEY, 'true');
         localStorage.removeItem(COLLECTOR_SESSION_KEY);
         localStorage.removeItem(CUSTOMER_SESSION_KEY);
-        setActiveCustomer(null);
-        setActiveCollector(null);
         setAppMode('admin');
         return true;
     }
 
-    // 2. Collector Login Check
     const foundCollector = collectors.find(c => {
         const isMatch = c.phone.replace(/\D/g,'') === u.replace(/\D/g,'') || c.id === u.toUpperCase();
         return isMatch && (c.password ? c.password === p : p === '123456');
@@ -129,14 +126,11 @@ const App: React.FC = () => {
     if (foundCollector) {
         setActiveCollector(foundCollector);
         localStorage.setItem(COLLECTOR_SESSION_KEY, foundCollector.id);
-        localStorage.removeItem(ADMIN_SESSION_KEY);
-        localStorage.removeItem(CUSTOMER_SESSION_KEY);
         setAppMode('collector');
         setView('dashboard');
         return true;
     }
 
-    // 3. Customer Login Check
     const foundCustomer = customers.find(c => {
         const isIdMatch = c.id.toUpperCase() === u.toUpperCase();
         const isPhoneMatch = c.phone.replace(/\D/g,'') === u.replace(/\D/g,'');
@@ -146,9 +140,6 @@ const App: React.FC = () => {
     if (foundCustomer) {
         setActiveCustomer(foundCustomer);
         localStorage.setItem(CUSTOMER_SESSION_KEY, foundCustomer.id);
-        localStorage.removeItem(ADMIN_SESSION_KEY);
-        localStorage.removeItem(COLLECTOR_SESSION_KEY);
-        setIsAdminLoggedIn(false);
         setAppMode('portal');
         return true;
     }
@@ -282,7 +273,11 @@ const App: React.FC = () => {
       {view === 'collectors' && appMode === 'admin' && <CollectorList collectors={collectors} bills={bills} onAdd={addCollector} onUpdate={updateCollector} onDelete={deleteCollector} />}
       {view === 'mikrotik' && appMode === 'admin' && <RouterList routers={routers} customers={customers} mikrotikUsers={mikrotikUsers} onAdd={async r => { await api.insert('routers', { ...r, id: Math.random().toString(36).substr(2, 9), status: 'Offline' }); await syncData(); }} onUpdate={async (id, u) => { await api.update('routers', id, u); await syncData(); }} onDelete={async id => { await api.delete('routers', id); await syncData(); }} onSyncUser={async (c, r) => { await api.insert('mikrotik_users', { id: Math.random().toString(36).substr(2, 9), customerId: c, routerId: r, username: 'user', profile: 'default', enabled: true, lastSynced: new Date().toISOString() }); await syncData(); }} onRemoveUser={async id => { await api.delete('mikrotik_users', id); await syncData(); }} onTest={id => {}} />}
       {view === 'payment-settings' && appMode === 'admin' && <PaymentSettings accounts={paymentAccounts} gatewayConfig={gatewayConfig} onAdd={async a => { await api.insert('payment_accounts', { ...a, id: Math.random().toString(36).substr(2, 9) }); await syncData(); }} onUpdate={async (id, u) => { await api.update('payment_accounts', id, u); await syncData(); }} onDelete={async id => { await api.delete('payment_accounts', id); await syncData(); }} onUpdateGateway={async c => { await api.updateGatewayConfig(c); await syncData(); }} />}
-      {view === 'settings' && appMode === 'admin' && <AdminSettings adminProfile={adminProfile} onUpdate={async u => { await api.updateAdmin(u); await syncData(); }} />}
+      {view === 'settings' && (
+        appMode === 'admin' 
+        ? <AdminSettings adminProfile={adminProfile} onUpdate={async u => { await api.updateAdmin(u); await syncData(); }} />
+        : activeCollector ? <CollectorProfile collector={activeCollector} onUpdate={async (id, u) => { await api.update('collectors', id, u); await syncData(); }} /> : null
+      )}
     </Layout>
   );
 };
