@@ -294,7 +294,7 @@ export const BillingList: React.FC<BillingListProps> = ({
                        </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                      <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform duration-200 hover:scale-110 cursor-default ${
                         b.status === BillStatus.PAID ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
                         b.status === BillStatus.PENDING ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 animate-pulse' :
                         isOverdue ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
