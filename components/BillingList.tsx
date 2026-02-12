@@ -31,8 +31,8 @@ export const BillingList: React.FC<BillingListProps> = ({
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   
   const [paymentModal, setPaymentModal] = useState<{ id: string, name: string, amount: number, isConfirmation?: boolean } | null>(null);
+  const [detailBill, setDetailBill] = useState<Bill | null>(null);
   const [penaltyInput, setPenaltyInput] = useState<number>(0);
-  const [viewingBill, setViewingBill] = useState<Bill | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -141,12 +141,14 @@ export const BillingList: React.FC<BillingListProps> = ({
       onMarkPaid(paymentModal.id, penaltyInput);
       setPaymentModal(null);
       setPenaltyInput(0);
+      setDetailBill(null); // Close detail if it was open
     }
   };
 
   const handleReject = (billId: string) => {
     if (confirm('Apakah Anda yakin ingin menolak konfirmasi pembayaran ini? Status tagihan akan kembali menjadi BELUM BAYAR.')) {
       onRejectPayment(billId);
+      setDetailBill(null);
     }
   };
 
@@ -154,6 +156,9 @@ export const BillingList: React.FC<BillingListProps> = ({
   const currentPeriodTotalBills = bills.filter(b => b.month === filterMonth && b.year === filterYear);
   const overdueCount = currentPeriodTotalBills.filter(b => b.status === BillStatus.UNPAID && b.dueDate < today).length;
   const pendingCount = currentPeriodTotalBills.filter(b => b.status === BillStatus.PENDING).length;
+
+  const getDetailCustomer = detailBill ? customers.find(c => c.id === detailBill.customerId) : null;
+  const getDetailHistory = detailBill ? bills.filter(b => b.customerId === detailBill.customerId && b.id !== detailBill.id) : [];
 
   return (
     <div className="space-y-6 pb-20 md:pb-0">
@@ -239,7 +244,7 @@ export const BillingList: React.FC<BillingListProps> = ({
         ))}
       </div>
 
-      {/* Filters: Stack on mobile, Grid on Tablet/Desktop */}
+      {/* Filters */}
       <div className="bg-white dark:bg-slate-900 p-4 md:p-6 rounded-2xl border dark:border-slate-800 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
         <div className="col-span-2 md:col-span-1">
           <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Cari</label>
@@ -284,21 +289,21 @@ export const BillingList: React.FC<BillingListProps> = ({
                 const isPending = b.status === BillStatus.PENDING;
                 const isSelected = selectedIds.includes(b.id);
                 return (
-                  <tr key={b.id} className={`transition-colors ${isSelected ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : isPending ? 'bg-amber-50/20 dark:bg-amber-950/10' : isOverdue ? 'bg-rose-50/20 dark:bg-rose-950/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}>
-                    <td className="px-6 py-4">
+                  <tr key={b.id} className={`transition-colors cursor-pointer group ${isSelected ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : isPending ? 'bg-amber-50/20 dark:bg-amber-950/10' : isOverdue ? 'bg-rose-50/20 dark:bg-rose-950/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}`}>
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500 dark:bg-slate-900 dark:border-slate-700" checked={isSelected} onChange={() => toggleSelect(b.id)} />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                       <p className="font-bold text-slate-800 dark:text-slate-200">{customer?.name || 'N/A'}</p>
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={() => setDetailBill(b)}>
+                       <p className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 transition-colors">{customer?.name || 'N/A'}</p>
                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-tighter">#{b.id.toUpperCase()}</p>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={() => setDetailBill(b)}>
                        <div className="flex flex-col">
                           <span className="font-bold text-slate-800 dark:text-slate-200">{formatter.format(b.amount)}</span>
                           <span className="text-[10px] text-slate-400">{months.find(m => m.value === b.month)?.label}</span>
                        </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={() => setDetailBill(b)}>
                       <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
                         b.status === BillStatus.PAID ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
                         b.status === BillStatus.PENDING ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 animate-pulse' :
@@ -307,31 +312,28 @@ export const BillingList: React.FC<BillingListProps> = ({
                         {b.status === BillStatus.PAID ? 'Lunas' : b.status === BillStatus.PENDING ? 'Cek' : isOverdue ? 'Telat' : 'Unpaid'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right space-x-1 whitespace-nowrap">
+                    <td className="px-6 py-4 text-right space-x-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       {isPending && customer && (
                          <div className="flex justify-end gap-1">
-                            <button onClick={() => openPaymentModal(b, customer.name, true)} title="Setujui" className="bg-indigo-600 text-white p-2 rounded-lg text-xs font-black shadow-md">
+                            <button onClick={() => openPaymentModal(b, customer.name, true)} title="Setujui" className="bg-indigo-600 text-white p-2 rounded-lg text-xs font-black shadow-md transition-transform active:scale-95">
                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
                             </button>
-                            <button onClick={() => handleReject(b.id)} title="Tolak" className="bg-rose-100 text-rose-600 p-2 rounded-lg text-xs font-bold">
+                            <button onClick={() => handleReject(b.id)} title="Tolak" className="bg-rose-100 text-rose-600 p-2 rounded-lg text-xs font-bold transition-transform active:scale-95">
                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
                             </button>
                          </div>
                       )}
                       {!isPending && b.status === BillStatus.UNPAID && customer && (
                         <>
-                          <button onClick={() => sendReminder(b, customer)} className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg">
+                          <button onClick={() => sendReminder(b, customer)} className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 p-2 rounded-lg transition-transform active:scale-95">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                           </button>
-                          <button onClick={() => openPaymentModal(b, customer.name)} className="bg-indigo-600 text-white p-2 rounded-lg text-xs font-bold shadow-md">
+                          <button onClick={() => openPaymentModal(b, customer.name)} className="bg-indigo-600 text-white p-2 rounded-lg text-xs font-bold shadow-md transition-transform active:scale-95">
                             Bayar
                           </button>
                         </>
                       )}
-                      <button onClick={() => setViewingBill(b)} className="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 p-2 rounded-lg transition-colors" title="Lihat Detail">
-                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                      </button>
-                      <button onClick={() => onDelete(b.id)} className="text-slate-300 dark:text-slate-700 hover:text-rose-600 p-2">
+                      <button onClick={() => onDelete(b.id)} className="text-slate-300 dark:text-slate-700 hover:text-rose-600 p-2 transition-colors">
                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                       </button>
                     </td>
@@ -347,9 +349,140 @@ export const BillingList: React.FC<BillingListProps> = ({
         </div>
       </div>
 
+      {/* Bill Detail Modal */}
+      {detailBill && getDetailCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+           <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-2xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col border dark:border-slate-800 animate-in zoom-in duration-300">
+              <div className="px-8 py-6 bg-slate-800 dark:bg-slate-950 text-white flex justify-between items-center shrink-0">
+                 <div>
+                    <h3 className="font-black text-xl tracking-tight">Detail Tagihan</h3>
+                    <p className="text-xs text-slate-400 font-mono">Invoice ID: #{detailBill.id.toUpperCase()}</p>
+                 </div>
+                 <button onClick={() => setDetailBill(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                 </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Customer Info */}
+                    <div className="space-y-4">
+                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 pb-2">Informasi Pelanggan</h4>
+                       <div>
+                          <p className="text-sm font-black text-slate-800 dark:text-slate-100">{getDetailCustomer.name}</p>
+                          <p className="text-xs text-slate-500 font-medium">Customer ID: {getDetailCustomer.id}</p>
+                          <p className="text-xs text-slate-500 mt-2 font-medium leading-relaxed">{getDetailCustomer.address}</p>
+                          <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-bold">{getDetailCustomer.phone}</p>
+                       </div>
+                    </div>
+
+                    {/* Bill Info */}
+                    <div className="space-y-4">
+                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 pb-2">Rincian Periode</h4>
+                       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl space-y-3">
+                          <div className="flex justify-between items-center">
+                             <span className="text-xs text-slate-500 font-bold">Bulan / Tahun</span>
+                             <span className="text-xs font-black text-slate-800 dark:text-slate-200">{months.find(m => m.value === detailBill.month)?.label} {detailBill.year}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                             <span className="text-xs text-slate-500 font-bold">Jatuh Tempo</span>
+                             <span className="text-xs font-black text-rose-600">{detailBill.dueDate}</span>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* Payment Status & Details */}
+                 <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 pb-2">Status & Pembayaran</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl flex flex-col justify-center">
+                          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Status</p>
+                          <span className={`w-fit px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                             detailBill.status === BillStatus.PAID ? 'bg-emerald-100 text-emerald-700' : 
+                             detailBill.status === BillStatus.PENDING ? 'bg-amber-100 text-amber-700' : 
+                             'bg-rose-100 text-rose-700'
+                          }`}>
+                             {detailBill.status}
+                          </span>
+                       </div>
+                       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
+                          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Metode</p>
+                          <p className="text-xs font-black text-slate-800 dark:text-slate-200 truncate">{detailBill.paymentMethod || '-'}</p>
+                       </div>
+                       <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl">
+                          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Tanggal Bayar</p>
+                          <p className="text-xs font-black text-slate-800 dark:text-slate-200">{detailBill.paidAt ? detailBill.paidAt.split(' ')[0] : '-'}</p>
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* Financial Breakdown */}
+                 <div className="bg-indigo-600 text-white p-8 rounded-3xl shadow-xl shadow-indigo-100 dark:shadow-none space-y-4 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-10 translate-x-10"></div>
+                    <div className="flex justify-between items-center text-indigo-100 text-xs font-bold uppercase tracking-widest">
+                       <span>Tagihan Pokok</span>
+                       <span>{formatter.format(detailBill.amount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-indigo-100 text-xs font-bold uppercase tracking-widest">
+                       <span>Denda / Penalty</span>
+                       <span>{formatter.format(detailBill.penaltyAmount || 0)}</span>
+                    </div>
+                    <div className="pt-4 border-t border-white/20 flex justify-between items-center">
+                       <span className="text-sm font-black uppercase tracking-tight">Total Akhir</span>
+                       <span className="text-2xl font-black">{formatter.format(detailBill.amount + (detailBill.penaltyAmount || 0))}</span>
+                    </div>
+                 </div>
+
+                 {/* Riwayat Pembayaran */}
+                 <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b dark:border-slate-800 pb-2">Tagihan Lainnya (Pelanggan Ini)</h4>
+                    {getDetailHistory.length > 0 ? (
+                       <div className="space-y-2">
+                          {getDetailHistory.slice().reverse().map(hist => (
+                             <div key={hist.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 transition-colors">
+                                <div>
+                                   <p className="text-xs font-black text-slate-800 dark:text-slate-200">{months.find(m => m.value === hist.month)?.label} {hist.year}</p>
+                                   <p className="text-[10px] text-slate-400 font-mono">#{hist.id.toUpperCase()}</p>
+                                </div>
+                                <div className="text-right">
+                                   <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatter.format(hist.amount + (hist.penaltyAmount || 0))}</p>
+                                   <span className={`text-[8px] font-black uppercase ${hist.status === BillStatus.PAID ? 'text-emerald-500' : 'text-rose-500'}`}>{hist.status}</span>
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    ) : (
+                       <p className="text-center text-xs text-slate-400 py-4 italic">Tidak ada tagihan lain.</p>
+                    )}
+                 </div>
+              </div>
+
+              <div className="px-8 py-6 bg-slate-50 dark:bg-slate-950 border-t dark:border-slate-800 flex flex-col sm:flex-row gap-3 shrink-0">
+                 {detailBill.status === BillStatus.PENDING ? (
+                    <>
+                       <button onClick={() => openPaymentModal(detailBill, getDetailCustomer.name, true)} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 dark:shadow-none transition-transform active:scale-95">SETUJUI PEMBAYARAN</button>
+                       <button onClick={() => handleReject(detailBill.id)} className="flex-1 bg-rose-100 text-rose-600 py-4 rounded-2xl font-black text-sm transition-transform active:scale-95">TOLAK / REJECT</button>
+                    </>
+                 ) : detailBill.status === BillStatus.UNPAID ? (
+                    <>
+                       <button onClick={() => openPaymentModal(detailBill, getDetailCustomer.name)} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-indigo-100 dark:shadow-none transition-transform active:scale-95">CATAT PEMBAYARAN</button>
+                       <button onClick={() => sendReminder(detailBill, getDetailCustomer)} className="flex-1 bg-emerald-100 text-emerald-700 py-4 rounded-2xl font-black text-sm transition-transform active:scale-95 flex items-center justify-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                          KIRIM WA
+                       </button>
+                    </>
+                 ) : (
+                    <button onClick={() => setDetailBill(null)} className="w-full bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 py-4 rounded-2xl font-black text-sm transition-transform active:scale-95">TUTUP</button>
+                 )}
+              </div>
+           </div>
+        </div>
+      )}
+
       {paymentModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-           <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+           <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden border dark:border-slate-800">
               <div className="p-8 text-center">
                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">
                     {paymentModal.isConfirmation ? 'Konfirmasi' : 'Bayar'}
@@ -362,7 +495,7 @@ export const BillingList: React.FC<BillingListProps> = ({
                     </div>
                     <div className="space-y-2">
                        <label className="block text-xs text-slate-500 font-bold uppercase">Denda:</label>
-                       <input type="number" className="w-full bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl py-2 px-4 font-black text-rose-600 outline-none" value={penaltyInput} onChange={(e) => setPenaltyInput(parseInt(e.target.value) || 0)} />
+                       <input type="number" className="w-full bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl py-2 px-4 font-black text-rose-600 outline-none focus:ring-2 focus:ring-indigo-500" value={penaltyInput} onChange={(e) => setPenaltyInput(parseInt(e.target.value) || 0)} />
                     </div>
                     <div className="mt-4 pt-4 border-t dark:border-slate-700 flex justify-between items-center">
                        <span className="text-sm text-slate-800 dark:text-slate-200 font-bold">TOTAL:</span>
@@ -370,88 +503,13 @@ export const BillingList: React.FC<BillingListProps> = ({
                     </div>
                  </div>
                  <div className="flex flex-col gap-3">
-                    <button onClick={confirmPayment} className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-black shadow-lg">
+                    <button onClick={confirmPayment} className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-transform active:scale-95">
                        PROSES
                     </button>
-                    <button onClick={() => setPaymentModal(null)} className="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-3 rounded-2xl font-bold">Batal</button>
+                    <button onClick={() => setPaymentModal(null)} className="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 py-3 rounded-2xl font-bold transition-transform active:scale-95">Batal</button>
                  </div>
               </div>
            </div>
-        </div>
-      )}
-
-      {viewingBill && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border dark:border-slate-800 animate-in fade-in zoom-in duration-200">
-                <div className="px-6 py-4 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">Detail Tagihan</h3>
-                    <button onClick={() => setViewingBill(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <div className="text-center mb-6">
-                        <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-2 ${
-                            viewingBill.status === BillStatus.PAID ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
-                            viewingBill.status === BillStatus.PENDING ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
-                            'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'
-                        }`}>
-                            {viewingBill.status}
-                        </span>
-                        <h4 className="text-2xl font-black text-slate-800 dark:text-slate-100">{formatter.format(viewingBill.amount)}</h4>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Periode: {months.find(m => m.value === viewingBill.month)?.label} {viewingBill.year}</p>
-                    </div>
-
-                    <div className="space-y-3">
-                        <div className="flex justify-between py-2 border-b dark:border-slate-800">
-                            <span className="text-sm text-slate-500 dark:text-slate-400">ID Tagihan</span>
-                            <span className="text-sm font-mono font-bold text-slate-700 dark:text-slate-300">#{viewingBill.id}</span>
-                        </div>
-                        <div className="flex justify-between py-2 border-b dark:border-slate-800">
-                            <span className="text-sm text-slate-500 dark:text-slate-400">Pelanggan</span>
-                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300 text-right">{customers.find(c => c.id === viewingBill.customerId)?.name || '-'}</span>
-                        </div>
-                        
-                        {viewingBill.status === BillStatus.PAID && (
-                            <>
-                                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl mt-4">
-                                    <h5 className="font-bold text-emerald-700 dark:text-emerald-400 text-xs uppercase mb-3 border-b border-emerald-200 dark:border-emerald-800 pb-2">Riwayat Pembayaran</h5>
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-xs text-emerald-600 dark:text-emerald-500">Tanggal Bayar</span>
-                                            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">{viewingBill.paidAt ? new Date(viewingBill.paidAt).toLocaleString('id-ID') : '-'}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-xs text-emerald-600 dark:text-emerald-500">Metode</span>
-                                            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">{viewingBill.paymentMethod || 'Manual'}</span>
-                                        </div>
-                                        {viewingBill.penaltyAmount ? (
-                                             <div className="flex justify-between">
-                                                <span className="text-xs text-emerald-600 dark:text-emerald-500">Denda Keterlambatan</span>
-                                                <span className="text-xs font-bold text-rose-600 dark:text-rose-400">+{formatter.format(viewingBill.penaltyAmount)}</span>
-                                            </div>
-                                        ) : null}
-                                        <div className="flex justify-between pt-2 border-t border-emerald-200 dark:border-emerald-800 mt-2">
-                                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Total Diterima</span>
-                                            <span className="text-sm font-black text-emerald-800 dark:text-emerald-300">{formatter.format(viewingBill.amount + (viewingBill.penaltyAmount || 0))}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                        )}
-
-                        {(viewingBill.status === BillStatus.UNPAID || viewingBill.status === BillStatus.PENDING) && (
-                            <div className="flex justify-between py-2 border-b dark:border-slate-800">
-                                <span className="text-sm text-slate-500 dark:text-slate-400">Jatuh Tempo</span>
-                                <span className="text-sm font-bold text-rose-600 dark:text-rose-400">{viewingBill.dueDate}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-                <div className="px-6 py-4 bg-slate-50 dark:bg-slate-950 border-t dark:border-slate-800 flex justify-end">
-                    <button onClick={() => setViewingBill(null)} className="px-6 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-sm transition-colors hover:bg-slate-300 dark:hover:bg-slate-700">Tutup</button>
-                </div>
-            </div>
         </div>
       )}
     </div>
