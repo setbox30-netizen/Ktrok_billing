@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { CustomerList } from './components/CustomerList';
@@ -20,7 +20,9 @@ const INITIAL_ADMIN: AdminProfile = {
   name: 'Super Admin',
   businessName: 'WIFINET',
   username: 'admin',
-  password: 'admin123'
+  password: 'admin123',
+  autoBillingEnabled: true,
+  billingDay: 1
 };
 
 const INITIAL_GATEWAY: PaymentGatewayConfig = {
@@ -48,76 +50,109 @@ const App: React.FC = () => {
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
   const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfig>(INITIAL_GATEWAY);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // Load data from SQL Database on mount
-  useEffect(() => {
-    const loadData = async () => {
-        setIsLoading(true);
-        const data = await api.fetchInitialData();
-        if (data) {
-            setCustomers(data.customers || []);
-            setPackages(data.packages || []);
-            setBills(data.bills || []);
-            setRouters(data.routers || []);
-            setPaymentAccounts(data.paymentAccounts || []);
-            setMikrotikUsers(data.mikrotikUsers || []);
-            if (data.adminProfile) setAdminProfile(data.adminProfile);
-            if (data.gatewayConfig) setGatewayConfig(data.gatewayConfig);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-            // Check sessions AFTER data is loaded
-            const adminLogged = localStorage.getItem(ADMIN_SESSION_KEY) === 'true';
-            const customerId = localStorage.getItem(CUSTOMER_SESSION_KEY);
+  // Load and Sync Data Function
+  const syncData = useCallback(async (isInitial = false) => {
+    if (!isInitial) setIsSyncing(true);
+    const data = await api.fetchInitialData();
+    if (data) {
+        setCustomers(data.customers || []);
+        setPackages(data.packages || []);
+        setBills(data.bills || []);
+        setRouters(data.routers || []);
+        setPaymentAccounts(data.paymentAccounts || []);
+        setMikrotikUsers(data.mikrotikUsers || []);
+        if (data.adminProfile) setAdminProfile(data.adminProfile);
+        if (data.gatewayConfig) setGatewayConfig(data.gatewayConfig);
 
-            if (adminLogged) {
-                setIsAdminLoggedIn(true);
-                setAppMode('admin');
-            } else if (customerId && data.customers) {
-                const found = data.customers.find((c: Customer) => c.id === customerId);
-                if (found) {
-                    setActiveCustomer(found);
-                    setAppMode('portal');
-                }
-            }
+        // Update active customer reference if in portal mode
+        const customerId = localStorage.getItem(CUSTOMER_SESSION_KEY);
+        if (customerId && data.customers) {
+            const found = data.customers.find((c: Customer) => c.id === customerId);
+            if (found) setActiveCustomer(found);
         }
-        setIsLoading(false);
-    };
-    loadData();
+    }
+    if (isInitial) setIsLoading(false);
+    setTimeout(() => setIsSyncing(false), 800);
   }, []);
+  
+  // Initial Load
+  useEffect(() => {
+    const init = async () => {
+        setIsLoading(true);
+        await syncData(true);
+        
+        const adminLogged = localStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+        const customerId = localStorage.getItem(CUSTOMER_SESSION_KEY);
+
+        if (adminLogged) {
+            setIsAdminLoggedIn(true);
+            setAppMode('admin');
+        } else if (customerId) {
+            setAppMode('portal');
+        }
+    };
+    init();
+  }, [syncData]);
+
+  // Background Sync (Every 30 seconds)
+  useEffect(() => {
+    if (appMode === 'landing') return;
+    
+    const interval = setInterval(() => {
+        syncData();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [appMode, syncData]);
+
+  // AUTO BILLING CHECK
+  useEffect(() => {
+    if (isAdminLoggedIn && adminProfile.autoBillingEnabled && customers.length > 0) {
+      const today = new Date();
+      const currentDay = today.getDate();
+      const currentMonth = (today.getMonth() + 1).toString();
+      const currentYear = today.getFullYear();
+
+      if (currentDay >= (adminProfile.billingDay || 1)) {
+        const activeCustomers = customers.filter(c => c.status === Status.ACTIVE);
+        const alreadyBilledIds = new Set(
+          bills
+            .filter(b => b.month === currentMonth && b.year === currentYear)
+            .map(b => b.customerId)
+        );
+
+        const needsBilling = activeCustomers.filter(c => !alreadyBilledIds.has(c.id));
+
+        if (needsBilling.length > 0) {
+          generateBills(currentMonth, currentYear);
+        }
+      }
+    }
+  }, [isAdminLoggedIn, customers, bills, adminProfile.autoBillingEnabled, adminProfile.billingDay]);
 
   // Universal Login Handler
   const handleLogin = (u: string, p: string): boolean => {
-    // 1. Check Admin
     if (u === adminProfile.username && p === (adminProfile.password || 'admin123')) {
         setIsAdminLoggedIn(true);
         localStorage.setItem(ADMIN_SESSION_KEY, 'true');
-        // Clear customer session just in case
         localStorage.removeItem(CUSTOMER_SESSION_KEY);
         setActiveCustomer(null);
         setAppMode('admin');
         return true;
     }
 
-    // 2. Check Customer
-    // User can login with ID OR Phone
     const foundCustomer = customers.find(c => {
         const isIdMatch = c.id.toUpperCase() === u.toUpperCase();
-        const isPhoneMatch = c.phone.replace(/\D/g,'') === u.replace(/\D/g,''); // compare clean numbers
-        
+        const isPhoneMatch = c.phone.replace(/\D/g,'') === u.replace(/\D/g,'');
         if (!isIdMatch && !isPhoneMatch) return false;
-
-        // Check Password (priority) OR Phone number as fallback password if not set
-        if (c.password) {
-            return c.password === p;
-        } else {
-            // If no password set, use phone as password
-            return c.phone.replace(/\D/g,'') === p.replace(/\D/g,'');
-        }
+        return c.password ? c.password === p : c.phone.replace(/\D/g,'') === p.replace(/\D/g,'');
     });
 
     if (foundCustomer) {
         setActiveCustomer(foundCustomer);
         localStorage.setItem(CUSTOMER_SESSION_KEY, foundCustomer.id);
-        // Clear admin session
         localStorage.removeItem(ADMIN_SESSION_KEY);
         setIsAdminLoggedIn(false);
         setAppMode('portal');
@@ -136,7 +171,7 @@ const App: React.FC = () => {
     setView('dashboard');
   };
 
-  // --- CUSTOMER ACTIONS ---
+  // --- ACTIONS ---
   const addCustomer = async (c: Omit<Customer, 'id' | 'createdAt'>) => {
     const newCustomer: Customer = { 
         ...c, 
@@ -144,47 +179,44 @@ const App: React.FC = () => {
         createdAt: new Date().toISOString().slice(0, 19).replace('T', ' ') 
     };
     await api.insert('customers', newCustomer);
-    setCustomers([...customers, newCustomer]);
+    await syncData();
   };
 
   const updateCustomer = async (id: string, updates: Partial<Customer>) => {
     await api.update('customers', id, updates);
-    setCustomers(customers.map(c => c.id === id ? { ...c, ...updates } : c));
+    await syncData();
   };
   
   const bulkUpdateCustomerStatus = async (ids: string[], status: Status) => {
       const promises = ids.map(id => api.update('customers', id, { status }));
       await Promise.all(promises);
-      setCustomers(customers.map(c => ids.includes(c.id) ? {...c, status} : c));
+      await syncData();
   };
 
   const deleteCustomer = async (id: string) => {
       await api.delete('customers', id);
-      setCustomers(customers.filter(c => c.id !== id));
+      await syncData();
   };
 
-  // --- PACKAGE ACTIONS ---
   const addPackage = async (p: Omit<Package, 'id'>) => {
       const newPkg = { ...p, id: Math.random().toString(36).substr(2, 9) };
       await api.insert('packages', newPkg);
-      setPackages([...packages, newPkg]);
+      await syncData();
   };
   
   const updatePackage = async (id: string, u: Partial<Package>) => {
       await api.update('packages', id, u);
-      setPackages(packages.map(p => p.id === id ? {...p, ...u} : p));
+      await syncData();
   };
 
   const deletePackage = async (id: string) => {
       await api.delete('packages', id);
-      setPackages(packages.filter(p => p.id !== id));
+      await syncData();
   };
 
-  // --- BILLING ACTIONS ---
   const generateBills = async (m: string, y: number) => {
     const active = customers.filter(c => c.status === Status.ACTIVE);
     const newBills: Bill[] = [];
-    
     for (const c of active) {
         if (!bills.find(b => b.customerId === c.id && b.month === m && b.year === y)) {
             const bill: Bill = {
@@ -195,10 +227,10 @@ const App: React.FC = () => {
                dueDate: `${y}-${m.padStart(2, '0')}-10`
             };
             newBills.push(bill);
-            await api.insert('bills', bill); // Insert sequentially
+            await api.insert('bills', bill);
         }
     }
-    setBills([...bills, ...newBills]);
+    await syncData();
   };
 
   const markAsPaid = async (id: string, penaltyAmount: number = 0) => {
@@ -208,125 +240,97 @@ const App: React.FC = () => {
         penaltyAmount 
     };
     await api.update('bills', id, updates);
-    setBills(bills.map(b => b.id === id ? { ...b, ...updates } : b));
+    await syncData();
   };
 
   const submitPaymentConfirmation = async (billId: string, method: string) => {
     const updates = { status: BillStatus.PENDING, paymentMethod: method };
     await api.update('bills', billId, updates);
-    setBills(bills.map(b => b.id === billId ? { ...b, ...updates } : b));
-  };
-
-  // Automated Payment Success (Midtrans/Xendit)
-  const handlePaymentGatewaySuccess = async (billId: string, method: string) => {
-    const updates = { 
-        status: BillStatus.PAID, 
-        paymentMethod: method,
-        paidAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-    };
-    await api.update('bills', billId, updates);
-    setBills(bills.map(b => b.id === billId ? { ...b, ...updates } : b));
+    await syncData();
   };
 
   const rejectPayment = async (billId: string) => {
-    const updates = { status: BillStatus.UNPAID, paymentMethod: '' }; 
-    await api.update('bills', billId, updates);
-    setBills(bills.map(b => b.id === billId ? { ...b, status: BillStatus.UNPAID, paymentMethod: undefined } : b));
+    await api.update('bills', billId, { status: BillStatus.UNPAID, paymentMethod: '' });
+    await syncData();
   };
   
   const deleteBill = async (id: string) => {
       await api.delete('bills', id);
-      setBills(bills.filter(b => b.id !== id));
+      await syncData();
   };
   
   const deleteMultipleBills = async (ids: string[]) => {
       await api.bulkDelete('bills', ids);
-      setBills(bills.filter(b => !ids.includes(b.id)));
+      await syncData();
   };
   
   const markMultiplePaid = async (ids: string[]) => {
       const paidAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
       const promises = ids.map(id => api.update('bills', id, { status: BillStatus.PAID, paidAt }));
       await Promise.all(promises);
-      setBills(bills.map(b => ids.includes(b.id) ? {...b, status: BillStatus.PAID, paidAt } : b));
+      await syncData();
   };
 
-  // --- ROUTER ACTIONS ---
   const addRouter = async (r: Omit<Router, 'id' | 'status'>) => {
-      const newRouter = { ...r, id: Math.random().toString(36).substr(2, 9), status: 'Offline' as const };
-      await api.insert('routers', newRouter);
-      setRouters([...routers, newRouter]);
+      await api.insert('routers', { ...r, id: Math.random().toString(36).substr(2, 9), status: 'Offline' });
+      await syncData();
   };
   
   const updateRouter = async (id: string, u: Partial<Router>) => {
       await api.update('routers', id, u);
-      setRouters(routers.map(r => r.id === id ? {...r, ...u} : r));
+      await syncData();
   };
 
   const deleteRouter = async (id: string) => {
       await api.delete('routers', id);
-      setRouters(routers.filter(r => r.id !== id));
+      await syncData();
   };
 
-  // --- MIKROTIK SYNC ---
   const syncMikrotikUser = async (customerId: string, routerId: string) => {
     const existing = mikrotikUsers.find(u => u.customerId === customerId);
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    
     if (existing) {
-        const updates = { lastSynced: now, routerId, enabled: true };
-        await api.update('mikrotik_users', existing.id, updates);
-        setMikrotikUsers(mikrotikUsers.map(u => u.id === existing.id ? { ...u, ...updates } : u));
+        await api.update('mikrotik_users', existing.id, { lastSynced: now, routerId, enabled: true });
     } else {
         const customer = customers.find(c => c.id === customerId);
-        const newUser: MikrotikUser = {
+        await api.insert('mikrotik_users', {
             id: Math.random().toString(36).substr(2, 9),
-            customerId,
-            routerId,
-            username: customer?.phone || 'user',
-            profile: 'default',
-            enabled: true,
-            lastSynced: now
-        };
-        await api.insert('mikrotik_users', newUser);
-        setMikrotikUsers([...mikrotikUsers, newUser]);
+            customerId, routerId, username: customer?.phone || 'user',
+            profile: 'default', enabled: true, lastSynced: now
+        });
     }
+    await syncData();
   };
 
   const removeMikrotikUser = async (uid: string) => {
       await api.delete('mikrotik_users', uid);
-      setMikrotikUsers(mikrotikUsers.filter(u => u.id !== uid));
+      await syncData();
   };
 
-  // --- PAYMENT ACCOUNT & GATEWAY ACTIONS ---
   const addPaymentAccount = async (acc: Omit<PaymentAccount, 'id'>) => {
-      const newAcc = { ...acc, id: Math.random().toString(36).substr(2, 9) };
-      await api.insert('payment_accounts', newAcc);
-      setPaymentAccounts([...paymentAccounts, newAcc]);
+      await api.insert('payment_accounts', { ...acc, id: Math.random().toString(36).substr(2, 9) });
+      await syncData();
   };
 
   const updatePaymentAccount = async (id: string, u: Partial<PaymentAccount>) => {
       await api.update('payment_accounts', id, u);
-      setPaymentAccounts(paymentAccounts.map(a => a.id === id ? {...a, ...u} : a));
+      await syncData();
   };
 
   const deletePaymentAccount = async (id: string) => {
       await api.delete('payment_accounts', id);
-      setPaymentAccounts(paymentAccounts.filter(a => a.id !== id));
+      await syncData();
   };
 
   const updateGatewayConfig = async (config: PaymentGatewayConfig) => {
       await api.updateGatewayConfig(config);
-      setGatewayConfig(config);
+      await syncData();
   };
   
-  // --- ADMIN PROFILE ---
   const updateAdminProfile = async (updates: AdminProfile) => {
       await api.updateAdmin(updates);
-      setAdminProfile(updates);
+      await syncData();
   };
-
-  // --- RENDER LOGIC ---
 
   if (isLoading) {
       return (
@@ -336,44 +340,37 @@ const App: React.FC = () => {
       );
   }
 
-  // 1. Universal Landing Page (Login)
   if (appMode === 'landing') {
-      return (
-          <LandingPage 
-            businessName={adminProfile.businessName}
-            onLogin={handleLogin}
-          />
-      );
+      return <LandingPage businessName={adminProfile.businessName} onLogin={handleLogin} />;
   }
 
-  // 2. Customer Portal
   if (appMode === 'portal') {
     return (
       <CustomerPortal 
-        initialCustomer={activeCustomer} // Pass the authenticated customer
+        initialCustomer={activeCustomer}
         customers={customers}
         packages={packages}
         bills={bills}
         paymentAccounts={paymentAccounts}
         gatewayConfig={gatewayConfig}
-        onPaymentSuccess={submitPaymentConfirmation} // For manual
-        onGatewayPaymentSuccess={handlePaymentGatewaySuccess} // For Midtrans/Xendit
+        onPaymentSuccess={submitPaymentConfirmation}
         onUpdateCustomer={updateCustomer}
         onLogout={handleLogout}
+        isSyncing={isSyncing}
+        onManualSync={() => syncData()}
       />
     );
   }
 
-  // 3. Admin App (Dashboard)
   return (
     <Layout 
       currentView={view} 
       onViewChange={setView} 
-      onSwitchMode={() => {}} // Disabled switch mode from inside admin since we have unified login
       adminProfile={adminProfile}
       onLogout={handleLogout}
+      isSyncing={isSyncing}
     >
-      {view === 'dashboard' && <Dashboard customers={customers} bills={bills} packages={packages} onViewChange={setView} />}
+      {view === 'dashboard' && <Dashboard customers={customers} bills={bills} packages={packages} onViewChange={setView} adminProfile={adminProfile} />}
       {view === 'customers' && (
         <CustomerList 
           customers={customers} packages={packages} bills={bills}
@@ -384,41 +381,28 @@ const App: React.FC = () => {
       )}
       {view === 'packages' && (
         <PackageList 
-          packages={packages} 
-          onAdd={addPackage}
-          onUpdate={updatePackage}
-          onDelete={deletePackage}
+          packages={packages} onAdd={addPackage} onUpdate={updatePackage} onDelete={deletePackage}
         />
       )}
       {view === 'billing' && (
         <BillingList 
-          bills={bills} customers={customers} 
-          onGenerate={generateBills} 
-          onMarkPaid={markAsPaid}
-          onRejectPayment={rejectPayment}
-          onMarkMultiplePaid={markMultiplePaid}
-          onDelete={deleteBill}
-          onDeleteMultiple={deleteMultipleBills}
+          bills={bills} customers={customers} onGenerate={generateBills} onMarkPaid={markAsPaid}
+          onRejectPayment={rejectPayment} onMarkMultiplePaid={markMultiplePaid}
+          onDelete={deleteBill} onDeleteMultiple={deleteMultipleBills}
         />
       )}
       {view === 'mikrotik' && (
         <RouterList 
           routers={routers} customers={customers} mikrotikUsers={mikrotikUsers}
-          onAdd={addRouter}
-          onUpdate={updateRouter}
-          onDelete={deleteRouter}
-          onTest={id => {}} // simulated
-          onSyncUser={syncMikrotikUser}
-          onRemoveUser={removeMikrotikUser}
+          onAdd={addRouter} onUpdate={updateRouter} onDelete={deleteRouter}
+          onSyncUser={syncMikrotikUser} onRemoveUser={removeMikrotikUser}
+          onTest={id => {}}
         />
       )}
       {view === 'payment-settings' && (
         <PaymentSettings 
-          accounts={paymentAccounts}
-          gatewayConfig={gatewayConfig}
-          onAdd={addPaymentAccount}
-          onUpdate={updatePaymentAccount}
-          onDelete={deletePaymentAccount}
+          accounts={paymentAccounts} gatewayConfig={gatewayConfig}
+          onAdd={addPaymentAccount} onUpdate={updatePaymentAccount} onDelete={deletePaymentAccount}
           onUpdateGateway={updateGatewayConfig}
         />
       )}
