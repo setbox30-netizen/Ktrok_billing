@@ -294,12 +294,12 @@ export const BillingList: React.FC<BillingListProps> = ({
                        </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform duration-200 hover:scale-110 cursor-default ${
+                      <span className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform duration-200 hover:scale-105 cursor-default ${
                         b.status === BillStatus.PAID ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
                         b.status === BillStatus.PENDING ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 animate-pulse' :
                         isOverdue ? 'bg-rose-600 text-white shadow-lg shadow-rose-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
                       }`}>
-                        {b.status === BillStatus.PAID ? 'Lunas' : b.status === BillStatus.PENDING ? 'Cek Bukti' : isOverdue ? 'Overdue' : 'Unpaid'}
+                        {b.status === BillStatus.PAID ? 'Lunas' : b.status === BillStatus.PENDING ? 'Menunggu' : isOverdue ? 'Overdue' : 'Unpaid'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right space-x-1 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -414,10 +414,10 @@ export const BillingList: React.FC<BillingListProps> = ({
                              <p className="text-[10px] font-black text-indigo-200 uppercase mb-1">Total Pembayaran</p>
                              <h4 className="text-3xl font-black tracking-tighter">{formatter.format(detailBill.amount + (detailBill.penaltyAmount || 0))}</h4>
                           </div>
-                          <div className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-inner ${
+                          <div className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-inner transition-transform duration-200 hover:scale-110 cursor-default ${
                              detailBill.status === BillStatus.PAID ? 'bg-emerald-400/20 text-emerald-300' : 'bg-white/20 text-white'
                           }`}>
-                             {detailBill.status}
+                             {detailBill.status === BillStatus.PAID ? 'Lunas' : detailBill.status === BillStatus.PENDING ? 'Menunggu' : detailBill.status}
                           </div>
                        </div>
                     </div>
@@ -454,7 +454,7 @@ export const BillingList: React.FC<BillingListProps> = ({
                                 <div className="text-right">
                                    <p className="text-xs font-black text-slate-800 dark:text-slate-200">{formatter.format(hist.amount + (hist.penaltyAmount || 0))}</p>
                                    <p className={`text-[8px] font-black uppercase tracking-widest ${hist.status === BillStatus.PAID ? 'text-emerald-500' : 'text-rose-400'}`}>
-                                      {hist.status === BillStatus.PAID ? `Lunas • ${hist.paidAt?.split(' ')[0]}` : hist.status}
+                                      {hist.status === BillStatus.PAID ? `Lunas • ${hist.paidAt?.split(' ')[0]}` : hist.status === BillStatus.PENDING ? 'Menunggu' : hist.status}
                                    </p>
                                 </div>
                              </div>
