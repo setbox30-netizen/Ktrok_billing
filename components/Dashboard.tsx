@@ -9,15 +9,29 @@ interface DashboardProps {
   packages: Package[];
   onViewChange?: (view: View) => void;
   adminProfile?: AdminProfile;
+  newBillsAlert?: boolean;
+  onDismissNewBillsAlert?: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ customers, bills, packages, onViewChange, adminProfile }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ 
+  customers, 
+  bills, 
+  packages, 
+  onViewChange, 
+  adminProfile,
+  newBillsAlert = false,
+  onDismissNewBillsAlert
+}) => {
   const activeCustomers = customers.filter(c => c.status === Status.ACTIVE).length;
   const totalRevenue = bills.filter(b => b.status === BillStatus.PAID).reduce((acc, curr) => acc + curr.amount + (curr.penaltyAmount || 0), 0);
   
   const today = new Date().toISOString().split('T')[0];
   const overdueBills = bills.filter(b => b.status === BillStatus.UNPAID && b.dueDate < today);
   const totalOverdueAmount = overdueBills.reduce((acc, b) => acc + b.amount, 0);
+
+  const currentMonth = (new Date().getMonth() + 1).toString();
+  const currentYear = new Date().getFullYear();
+  const currentPeriodBills = bills.filter(b => b.month === currentMonth && b.year === currentYear);
 
   const potentialMonthly = customers
     .filter(c => c.status === Status.ACTIVE)
@@ -67,6 +81,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ customers, bills, packages
             </div>
         </div>
       </div>
+
+      {newBillsAlert && (
+        <div className="bg-indigo-600 border border-indigo-700 text-white px-4 md:px-6 py-4 rounded-3xl flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500 shadow-xl shadow-indigo-100 dark:shadow-none">
+          <div className="flex items-center gap-4">
+             <div className="bg-white/20 p-2 rounded-xl">
+               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+             </div>
+             <div>
+                <p className="font-bold text-sm">Tagihan Baru Terbit!</p>
+                <p className="text-indigo-100 text-xs">{currentPeriodBills.length} tagihan telah dibuat untuk periode {months[parseInt(currentMonth)-1]} {currentYear}.</p>
+             </div>
+          </div>
+          <button 
+            onClick={onDismissNewBillsAlert}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      )}
 
       {overdueBills.length > 0 && (
         <div className="bg-rose-600 border border-rose-700 text-white px-4 md:px-6 py-5 rounded-3xl flex flex-col md:flex-row items-center gap-4 md:gap-6 animate-in slide-in-from-top duration-700 shadow-2xl shadow-rose-200 dark:shadow-rose-950/50">
@@ -152,6 +186,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ customers, bills, packages
                     return null;
                   }}
                 />
+                <Bar dataKey="Terbayar" stackId="a" fill="#4f46e5" animationDuration={1500} />
                 <Bar dataKey="Terbayar" stackId="a" fill="#4f46e5" animationDuration={1500} />
                 <Bar dataKey="Menunggak" stackId="a" fill="#fbbf24" radius={[4, 4, 0, 0]} animationDuration={1500} />
               </BarChart>
