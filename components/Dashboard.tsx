@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Customer, Bill, Package, BillStatus, Status, View } from '../types';
+import { Customer, Bill, Package, BillStatus, Status, View, AdminProfile } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface DashboardProps {
@@ -8,9 +8,10 @@ interface DashboardProps {
   bills: Bill[];
   packages: Package[];
   onViewChange?: (view: View) => void;
+  adminProfile?: AdminProfile;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ customers, bills, packages, onViewChange }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ customers, bills, packages, onViewChange, adminProfile }) => {
   const activeCustomers = customers.filter(c => c.status === Status.ACTIVE).length;
   const totalRevenue = bills.filter(b => b.status === BillStatus.PAID).reduce((acc, curr) => acc + curr.amount + (curr.penaltyAmount || 0), 0);
   
@@ -54,8 +55,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ customers, bills, packages
     <div className="space-y-6 pb-20 md:pb-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Ikhtisar Bisnis</h2>
-        <div className="text-sm text-slate-500 dark:text-slate-400 font-medium bg-white dark:bg-slate-900 px-3 py-1 rounded-lg border dark:border-slate-800 w-fit">
-           Update: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+        <div className="flex items-center gap-2">
+            {adminProfile?.autoBillingEnabled && (
+                <div className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-full border border-indigo-100 dark:border-indigo-800 flex items-center gap-1.5 animate-in fade-in">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                    Auto-Billing Active (Tgl {adminProfile.billingDay})
+                </div>
+            )}
+            <div className="text-sm text-slate-500 dark:text-slate-400 font-medium bg-white dark:bg-slate-900 px-3 py-1 rounded-lg border dark:border-slate-800 w-fit">
+               Update: {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
         </div>
       </div>
 
