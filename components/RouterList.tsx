@@ -30,6 +30,10 @@ export const RouterList: React.FC<RouterListProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedRouterId, setSelectedRouterId] = useState<string>(routers[0]?.id || '');
   
+  // Modal testing states
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Refined sync status state
   const [syncStatus, setSyncStatus] = useState<Record<string, { type: 'loading' | 'success' | 'error', message?: string }>>({});
 
@@ -60,6 +64,7 @@ export const RouterList: React.FC<RouterListProps> = ({
       username: r.username,
       password: r.password || ''
     });
+    setTestResult(null);
     setShowModal(true);
   };
 
@@ -67,6 +72,24 @@ export const RouterList: React.FC<RouterListProps> = ({
     setShowModal(false);
     setEditingId(null);
     setFormData({ name: '', host: '', port: 8728, username: '', password: '' });
+    setTestResult(null);
+  };
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setTestResult(null);
+
+    // Simulate connection check
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const isSuccess = formData.host.length > 0 && formData.username.length > 0;
+    
+    if (isSuccess) {
+      setTestResult({ success: true, message: 'Koneksi Berhasil! Router merespon.' });
+    } else {
+      setTestResult({ success: false, message: 'Koneksi Gagal! Periksa Host/IP dan Port.' });
+    }
+    setIsTestingConnection(false);
   };
 
   const handleSync = async (customerId: string) => {
@@ -83,7 +106,6 @@ export const RouterList: React.FC<RouterListProps> = ({
         await new Promise(resolve => setTimeout(resolve, 1500));
         
         // Random success/failure simulation for demo purposes
-        // In production this would be the result of onSyncUser promise
         const isSuccess = Math.random() > 0.3;
         
         if (isSuccess) {
@@ -289,9 +311,41 @@ export const RouterList: React.FC<RouterListProps> = ({
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Password</label>
                 <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full px-4 py-2 border dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="******" />
               </div>
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border dark:border-slate-700 rounded-xl font-semibold text-slate-600 dark:text-slate-400">Batal</button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:bg-indigo-700 transition-all">Simpan</button>
+
+              {testResult && (
+                <div className={`p-3 rounded-xl text-xs font-bold animate-in fade-in slide-in-from-top-2 flex items-center gap-2 ${testResult.success ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400'}`}>
+                  {testResult.success ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  )}
+                  {testResult.message}
+                </div>
+              )}
+
+              <div className="pt-4 flex flex-col gap-3">
+                <button 
+                  type="button" 
+                  onClick={handleTestConnection} 
+                  disabled={isTestingConnection}
+                  className={`w-full py-3 rounded-xl text-sm font-bold border transition-all flex items-center justify-center gap-2 ${isTestingConnection ? 'bg-slate-50 text-slate-400 cursor-wait' : 'border-indigo-100 text-indigo-600 hover:bg-indigo-50 dark:border-slate-700 dark:text-indigo-400'}`}
+                >
+                  {isTestingConnection ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      Menghubungi Router...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Test Koneksi
+                    </>
+                  )}
+                </button>
+                <div className="flex gap-3">
+                  <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border dark:border-slate-700 rounded-xl font-semibold text-slate-600 dark:text-slate-400">Batal</button>
+                  <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg hover:bg-indigo-700 transition-all">Simpan</button>
+                </div>
               </div>
             </form>
           </div>
