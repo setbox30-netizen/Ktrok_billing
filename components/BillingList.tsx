@@ -61,6 +61,10 @@ export const BillingList: React.FC<BillingListProps> = ({
     maximumFractionDigits: 0 
   });
 
+  const getCollectorBillCount = (cId: string | undefined) => {
+    return bills.filter(b => b.month === filterMonth && b.year === filterYear && b.collectorId === cId).length;
+  };
+
   const allFilteredBills = bills.filter(b => {
     if (isCollector && b.collectorId !== collectorId) return false;
 
@@ -166,12 +170,12 @@ export const BillingList: React.FC<BillingListProps> = ({
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border dark:border-slate-800 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-         <div className="relative lg:col-span-1">
+      <div className={`bg-white dark:bg-slate-900 p-4 rounded-3xl border dark:border-slate-800 shadow-sm grid grid-cols-1 sm:grid-cols-2 ${isCollector ? 'lg:grid-cols-4' : 'lg:grid-cols-5'} gap-3`}>
+         <div className="relative">
             <svg className="w-4 h-4 absolute left-3 top-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             <input 
                type="text" 
-               placeholder="Cari nama / invoice..." 
+               placeholder="Cari pelanggan..." 
                className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium dark:text-slate-200"
                value={search}
                onChange={(e) => setSearch(e.target.value)}
@@ -191,10 +195,18 @@ export const BillingList: React.FC<BillingListProps> = ({
             <option value="paid">Lunas</option>
          </select>
          {!isCollector && (
-            <select value={filterCollector} onChange={(e) => setFilterCollector(e.target.value)} className="bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-600 dark:text-indigo-400">
+            <select 
+              value={filterCollector} 
+              onChange={(e) => setFilterCollector(e.target.value)} 
+              className={`bg-slate-50 dark:bg-slate-800 border-none rounded-xl text-sm px-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none font-bold transition-colors ${filterCollector !== 'all' ? 'text-indigo-600 dark:text-indigo-400 ring-2 ring-indigo-500/20' : 'text-slate-700 dark:text-slate-200'}`}
+            >
                <option value="all">Semua Petugas</option>
-               <option value="none">Belum Ditugaskan</option>
-               {collectors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+               <option value="none">Belum Ditugaskan ({getCollectorBillCount(undefined)})</option>
+               {collectors.map(c => (
+                 <option key={c.id} value={c.id}>
+                   {c.name} ({getCollectorBillCount(c.id)} Tagihan)
+                 </option>
+               ))}
             </select>
          )}
       </div>
