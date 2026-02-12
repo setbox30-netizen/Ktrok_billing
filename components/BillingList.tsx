@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
-import { Bill, Customer, BillStatus, Collector } from '../types';
+import { Bill, Customer, BillStatus, Collector, Package } from '../types';
 
 interface BillingListProps {
   bills: Bill[];
   customers: Customer[];
   collectors: Collector[];
+  packages?: Package[]; // Menambahkan packages untuk detail struk
   onGenerate: (month: string, year: number) => void;
   onMarkPaid: (id: string, penalty?: number) => void;
   onRejectPayment: (id: string) => void;
@@ -15,12 +16,14 @@ interface BillingListProps {
   onAssignCollector: (billIds: string[], collectorId: string) => void;
   isCollector?: boolean;
   collectorId?: string;
+  businessName?: string;
 }
 
 export const BillingList: React.FC<BillingListProps> = ({ 
   bills, 
   customers, 
   collectors,
+  packages = [],
   onGenerate, 
   onMarkPaid, 
   onRejectPayment,
@@ -29,7 +32,8 @@ export const BillingList: React.FC<BillingListProps> = ({
   onDeleteMultiple,
   onAssignCollector,
   isCollector = false,
-  collectorId
+  collectorId,
+  businessName = "WIFINET"
 }) => {
   const [filterMonth, setFilterMonth] = useState((new Date().getMonth() + 1).toString());
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
@@ -40,7 +44,7 @@ export const BillingList: React.FC<BillingListProps> = ({
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   
-  const [paymentModal, setPaymentModal] = useState<{ id: string, name: string, amount: number, phone: string } | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{ id: string, name: string, amount: number, phone: string, isDone?: boolean } | null>(null);
   const [detailBill, setDetailBill] = useState<{ bill: Bill, customer: Customer | undefined } | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
@@ -63,6 +67,94 @@ export const BillingList: React.FC<BillingListProps> = ({
 
   const getCollectorBillCount = (cId: string | undefined) => {
     return bills.filter(b => b.month === filterMonth && b.year === filterYear && b.collectorId === cId).length;
+  };
+
+  const handlePrint = (bill: Bill) => {
+    const customer = customers.find(c => c.id === bill.customerId);
+    const pkg = packages.find(p => p.id === customer?.packageId);
+    
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) return;
+
+    const receiptHtml = `
+      <html>
+        <head>
+          <title>Cetak Struk - ${bill.id}</title>
+          <style>
+            @page { margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 58mm; 
+              padding: 5mm; 
+              font-size: 12px;
+              color: #000;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .border-top { border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px; }
+            .border-bottom { border-bottom: 1px dashed #000; margin-bottom: 5px; padding-bottom: 5px; }
+            .flex { display: flex; justify-content: space-between; }
+            .mt-1 { margin-top: 4px; }
+            .mt-2 { margin-top: 8px; }
+            .status { 
+                border: 2px solid #000; 
+                display: inline-block; 
+                padding: 2px 10px; 
+                font-weight: bold; 
+                margin-top: 10px;
+                transform: rotate(-5deg);
+            }
+          </style>
+        </head>
+        <body onload="window.print();window.close()">
+          <div class="center bold" style="font-size: 16px;">${businessName}</div>
+          <div class="center">Layanan Internet Mandiri</div>
+          <div class="center">--------------------------------</div>
+          
+          <div class="mt-2">
+            <div class="flex"><span>Tgl:</span> <span>${bill.paidAt ? bill.paidAt.split(' ')[0] : today}</span></div>
+            <div class="flex"><span>No:</span> <span>#${bill.id.substring(0, 8).toUpperCase()}</span></div>
+            <div class="flex"><span>Plg:</span> <span class="bold">${customer?.name.substring(0, 15)}</span></div>
+            <div class="flex"><span>ID:</span> <span>${customer?.id}</span></div>
+          </div>
+
+          <div class="border-top mt-2">
+            <div class="bold">DETAIL TAGIHAN:</div>
+            <div class="flex mt-1">
+              <span>Bulan ${months[parseInt(bill.month)-1].label} ${bill.year}</span>
+            </div>
+            <div class="flex mt-1">
+              <span>Paket ${pkg?.name || 'Internet'}</span>
+              <span>${formatter.format(bill.amount)}</span>
+            </div>
+            ${bill.penaltyAmount ? `
+              <div class="flex">
+                <span>Denda Keterlambatan</span>
+                <span>${formatter.format(bill.penaltyAmount)}</span>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="border-top mt-2">
+            <div class="flex bold" style="font-size: 14px;">
+              <span>TOTAL</span>
+              <span>${formatter.format(bill.amount + (bill.penaltyAmount || 0))}</span>
+            </div>
+          </div>
+
+          <div class="center mt-2">
+            <div class="status">LUNAS</div>
+          </div>
+
+          <div class="border-top center mt-2" style="font-size: 10px;">
+            Simpan struk ini sebagai bukti<br>pembayaran yang sah.<br>Terima kasih!
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(receiptHtml);
+    printWindow.document.close();
   };
 
   const allFilteredBills = bills.filter(b => {
@@ -96,13 +188,14 @@ export const BillingList: React.FC<BillingListProps> = ({
       id: bill.id, 
       name: customer?.name || 'N/A', 
       amount: bill.amount,
-      phone: customer?.phone || ''
+      phone: customer?.phone || '',
+      isDone: false
     });
   };
 
   const handleWhatsAppRemind = (customer: Customer | undefined, bill: Bill) => {
     if (!customer) return;
-    const msg = `Halo Bapak/Ibu ${customer.name}, saya petugas dari WIFINET. Mengingatkan untuk tagihan internet bulan ${months[parseInt(bill.month)-1].label} sebesar ${formatter.format(bill.amount)} sudah jatuh tempo pada ${bill.dueDate.split('-').reverse().join('/')}. Mohon segera melakukan pembayaran. Terima kasih.`;
+    const msg = `Halo Bapak/Ibu ${customer.name}, saya petugas dari ${businessName}. Mengingatkan untuk tagihan internet bulan ${months[parseInt(bill.month)-1].label} sebesar ${formatter.format(bill.amount)} sudah jatuh tempo pada ${bill.dueDate.split('-').reverse().join('/')}. Mohon segera melakukan pembayaran. Terima kasih.`;
     window.open(`https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -280,6 +373,11 @@ export const BillingList: React.FC<BillingListProps> = ({
                                 </button>
                               </>
                           )}
+                          {b.status === BillStatus.PAID && (
+                              <button onClick={() => handlePrint(b)} className="p-2 text-indigo-600 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg hover:bg-indigo-100 transition-colors" title="Cetak Struk">
+                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                              </button>
+                          )}
                           <button onClick={() => setDetailBill({ bill: b, customer })} className="text-slate-400 hover:text-indigo-600 p-2 transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></button>
                        </div>
                     </td>
@@ -299,19 +397,45 @@ export const BillingList: React.FC<BillingListProps> = ({
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4 animate-in fade-in duration-200">
            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] w-full max-w-sm shadow-2xl overflow-hidden border dark:border-slate-800 animate-in zoom-in duration-200">
               <div className="p-8 text-center">
-                 <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                 </div>
-                 <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">Terima Pembayaran Tunai</h3>
-                 <p className="text-slate-500 text-sm mb-6 px-4 leading-tight italic">Pastikan Anda sudah menerima uang fisik dari Bapak/Ibu <b className="text-slate-800 dark:text-slate-200">{paymentModal.name}</b> sebelum melunaskan.</p>
-                 <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl mb-8">
-                    <p className="text-[10px] text-slate-400 font-black uppercase mb-1 tracking-widest">Total Diterima</p>
-                    <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatter.format(paymentModal.amount)}</p>
-                 </div>
-                 <div className="flex flex-col gap-3">
-                    <button onClick={() => { onMarkPaid(paymentModal.id); setPaymentModal(null); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-black shadow-lg shadow-indigo-100 dark:shadow-none transition-all active:scale-95">KONFIRMASI LUNAS</button>
-                    <button onClick={() => setPaymentModal(null)} className="w-full text-slate-400 font-bold uppercase text-xs hover:text-slate-600 transition-colors">Batal / Kembali</button>
-                 </div>
+                 {!paymentModal.isDone ? (
+                   <>
+                    <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                    </div>
+                    <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">Terima Pembayaran Tunai</h3>
+                    <p className="text-slate-500 text-sm mb-6 px-4 leading-tight italic">Pastikan Anda sudah menerima uang fisik dari Bapak/Ibu <b className="text-slate-800 dark:text-slate-200">{paymentModal.name}</b> sebelum melunaskan.</p>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl mb-8">
+                        <p className="text-[10px] text-slate-400 font-black uppercase mb-1 tracking-widest">Total Diterima</p>
+                        <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{formatter.format(paymentModal.amount)}</p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                        <button onClick={() => { onMarkPaid(paymentModal.id); setPaymentModal({...paymentModal, isDone: true}); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-black shadow-lg shadow-indigo-100 dark:shadow-none transition-all active:scale-95">KONFIRMASI LUNAS</button>
+                        <button onClick={() => setPaymentModal(null)} className="w-full text-slate-400 font-bold uppercase text-xs hover:text-slate-600 transition-colors">Batal / Kembali</button>
+                    </div>
+                   </>
+                 ) : (
+                    <div className="animate-in zoom-in">
+                        <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-200 dark:shadow-none">
+                            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-2">Berhasil!</h3>
+                        <p className="text-slate-500 text-sm mb-8">Tagihan telah ditandai lunas. Ingin mencetak struk sekarang?</p>
+                        <div className="flex flex-col gap-3">
+                            <button 
+                                onClick={() => { 
+                                    const bill = bills.find(b => b.id === paymentModal.id);
+                                    if(bill) handlePrint(bill);
+                                    setPaymentModal(null);
+                                }} 
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 rounded-xl font-black shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                                CETAK STRUK THERMAL
+                            </button>
+                            <button onClick={() => setPaymentModal(null)} className="w-full py-4 text-slate-400 font-black text-xs uppercase hover:text-slate-600 transition-colors">TUTUP</button>
+                        </div>
+                    </div>
+                 )}
               </div>
            </div>
         </div>
@@ -351,7 +475,18 @@ export const BillingList: React.FC<BillingListProps> = ({
                        <p className="text-xl font-black text-indigo-600 dark:text-indigo-400">{formatter.format(detailBill.bill.amount)}</p>
                     </div>
                  </div>
-                 <button onClick={() => setDetailBill(null)} className="w-full mt-6 py-4 text-slate-400 font-black text-sm uppercase hover:text-slate-600 transition-colors">Tutup Detail</button>
+                 <div className="flex gap-3 mt-6">
+                    {detailBill.bill.status === BillStatus.PAID && (
+                        <button 
+                            onClick={() => handlePrint(detailBill.bill)} 
+                            className="flex-1 bg-indigo-600 text-white py-4 rounded-xl font-black text-xs uppercase shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                            CETAK STRUK
+                        </button>
+                    )}
+                    <button onClick={() => setDetailBill(null)} className={`py-4 text-slate-400 font-black text-xs uppercase hover:text-slate-600 transition-colors ${detailBill.bill.status === BillStatus.PAID ? 'w-24' : 'w-full'}`}>Tutup</button>
+                 </div>
               </div>
            </div>
         </div>
