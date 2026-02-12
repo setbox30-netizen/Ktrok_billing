@@ -5,12 +5,13 @@ import { Dashboard } from './components/Dashboard';
 import { CustomerList } from './components/CustomerList';
 import { PackageList } from './components/PackageList';
 import { BillingList } from './components/BillingList';
+import { CollectorList } from './components/CollectorList';
 import { RouterList } from './components/RouterList';
 import { CustomerPortal } from './components/CustomerPortal';
 import { AdminSettings } from './components/AdminSettings';
 import { PaymentSettings } from './components/PaymentSettings';
 import { LandingPage } from './components/LandingPage';
-import { Customer, Package, Bill, View, Status, BillStatus, Router, MikrotikUser, AdminProfile, PaymentAccount, PaymentGatewayConfig } from './types';
+import { Customer, Package, Bill, View, Status, BillStatus, Router, MikrotikUser, AdminProfile, PaymentAccount, PaymentGatewayConfig, Collector } from './types';
 import { api } from './services/api';
 
 const ADMIN_SESSION_KEY = 'wifinet_admin_logged';
@@ -37,7 +38,6 @@ const App: React.FC = () => {
   const [appMode, setAppMode] = useState<AppMode>('landing');
   const [view, setView] = useState<View>('dashboard');
   
-  // Auth States
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [activeCustomer, setActiveCustomer] = useState<Customer | null>(null);
 
@@ -45,17 +45,15 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [collectors, setCollectors] = useState<Collector[]>([]);
   const [routers, setRouters] = useState<Router[]>([]);
   const [mikrotikUsers, setMikrotikUsers] = useState<MikrotikUser[]>([]);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
   const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfig>(INITIAL_GATEWAY);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  
-  // Notification state for new bills
   const [newBillsAlert, setNewBillsAlert] = useState(false);
 
-  // Load and Sync Data Function
   const syncData = useCallback(async (isInitial = false) => {
     if (!isInitial) setIsSyncing(true);
     const data = await api.fetchInitialData();
@@ -63,13 +61,13 @@ const App: React.FC = () => {
         setCustomers(data.customers || []);
         setPackages(data.packages || []);
         setBills(data.bills || []);
+        setCollectors(data.collectors || []);
         setRouters(data.routers || []);
         setPaymentAccounts(data.paymentAccounts || []);
         setMikrotikUsers(data.mikrotikUsers || []);
         if (data.adminProfile) setAdminProfile(data.adminProfile);
         if (data.gatewayConfig) setGatewayConfig(data.gatewayConfig);
 
-        // Update active customer reference if in portal mode
         const customerId = localStorage.getItem(CUSTOMER_SESSION_KEY);
         if (customerId && data.customers) {
             const found = data.customers.find((c: Customer) => c.id === customerId);
@@ -80,7 +78,6 @@ const App: React.FC = () => {
     setTimeout(() => setIsSyncing(false), 800);
   }, []);
   
-  // Initial Load
   useEffect(() => {
     const init = async () => {
         setIsLoading(true);
@@ -99,18 +96,12 @@ const App: React.FC = () => {
     init();
   }, [syncData]);
 
-  // Background Sync (Every 30 seconds)
   useEffect(() => {
     if (appMode === 'landing') return;
-    
-    const interval = setInterval(() => {
-        syncData();
-    }, 30000); // 30 seconds
-
+    const interval = setInterval(() => syncData(), 30000);
     return () => clearInterval(interval);
   }, [appMode, syncData]);
 
-  // AUTO BILLING CHECK
   useEffect(() => {
     if (isAdminLoggedIn && adminProfile.autoBillingEnabled && customers.length > 0) {
       const today = new Date();
@@ -125,17 +116,12 @@ const App: React.FC = () => {
             .filter(b => b.month === currentMonth && b.year === currentYear)
             .map(b => b.customerId)
         );
-
         const needsBilling = activeCustomers.filter(c => !alreadyBilledIds.has(c.id));
-
-        if (needsBilling.length > 0) {
-          generateBills(currentMonth, currentYear);
-        }
+        if (needsBilling.length > 0) generateBills(currentMonth, currentYear);
       }
     }
   }, [isAdminLoggedIn, customers, bills, adminProfile.autoBillingEnabled, adminProfile.billingDay]);
 
-  // Universal Login Handler
   const handleLogin = (u: string, p: string): boolean => {
     if (u === adminProfile.username && p === (adminProfile.password || 'admin123')) {
         setIsAdminLoggedIn(true);
@@ -145,14 +131,12 @@ const App: React.FC = () => {
         setAppMode('admin');
         return true;
     }
-
     const foundCustomer = customers.find(c => {
         const isIdMatch = c.id.toUpperCase() === u.toUpperCase();
         const isPhoneMatch = c.phone.replace(/\D/g,'') === u.replace(/\D/g,'');
         if (!isIdMatch && !isPhoneMatch) return false;
         return c.password ? c.password === p : c.phone.replace(/\D/g,'') === p.replace(/\D/g,'');
     });
-
     if (foundCustomer) {
         setActiveCustomer(foundCustomer);
         localStorage.setItem(CUSTOMER_SESSION_KEY, foundCustomer.id);
@@ -161,7 +145,6 @@ const App: React.FC = () => {
         setAppMode('portal');
         return true;
     }
-
     return false;
   };
 
@@ -174,7 +157,6 @@ const App: React.FC = () => {
     setView('dashboard');
   };
 
-  // --- ACTIONS ---
   const addCustomer = async (c: Omit<Customer, 'id' | 'createdAt'>) => {
     const newCustomer: Customer = { 
         ...c, 
@@ -189,37 +171,35 @@ const App: React.FC = () => {
     await api.update('customers', id, updates);
     await syncData();
   };
-  
-  const bulkUpdateCustomerStatus = async (ids: string[], status: Status) => {
-      const promises = ids.map(id => api.update('customers', id, { status }));
-      await Promise.all(promises);
-      await syncData();
+
+  const addCollector = async (c: Omit<Collector, 'id' | 'joinedAt'>) => {
+    const newColl = { 
+      ...c, 
+      id: 'COL' + Math.random().toString(36).substr(2, 4).toUpperCase(),
+      joinedAt: new Date().toISOString().slice(0, 10)
+    };
+    await api.insert('collectors', newColl);
+    await syncData();
   };
 
-  const deleteCustomer = async (id: string) => {
-      await api.delete('customers', id);
-      await syncData();
+  const updateCollector = async (id: string, u: Partial<Collector>) => {
+    await api.update('collectors', id, u);
+    await syncData();
   };
 
-  const addPackage = async (p: Omit<Package, 'id'>) => {
-      const newPkg = { ...p, id: Math.random().toString(36).substr(2, 9) };
-      await api.insert('packages', newPkg);
-      await syncData();
-  };
-  
-  const updatePackage = async (id: string, u: Partial<Package>) => {
-      await api.update('packages', id, u);
-      await syncData();
+  const deleteCollector = async (id: string) => {
+    await api.delete('collectors', id);
+    await syncData();
   };
 
-  const deletePackage = async (id: string) => {
-      await api.delete('packages', id);
-      await syncData();
+  const assignBillsToCollector = async (billIds: string[], collectorId: string) => {
+    const promises = billIds.map(id => api.update('bills', id, { collectorId }));
+    await Promise.all(promises);
+    await syncData();
   };
 
   const generateBills = async (m: string, y: number) => {
     const active = customers.filter(c => c.status === Status.ACTIVE);
-    const newBills: Bill[] = [];
     for (const c of active) {
         if (!bills.find(b => b.customerId === c.id && b.month === m && b.year === y)) {
             const bill: Bill = {
@@ -229,13 +209,10 @@ const App: React.FC = () => {
                status: BillStatus.UNPAID, 
                dueDate: `${y}-${m.padStart(2, '0')}-10`
             };
-            newBills.push(bill);
             await api.insert('bills', bill);
         }
     }
-    if (newBills.length > 0) {
-      setNewBillsAlert(true);
-    }
+    setNewBillsAlert(true);
     await syncData();
   };
 
@@ -249,27 +226,6 @@ const App: React.FC = () => {
     await syncData();
   };
 
-  const submitPaymentConfirmation = async (billId: string, method: string) => {
-    const updates = { status: BillStatus.PENDING, paymentMethod: method };
-    await api.update('bills', billId, updates);
-    await syncData();
-  };
-
-  const rejectPayment = async (billId: string) => {
-    await api.update('bills', billId, { status: BillStatus.UNPAID, paymentMethod: '' });
-    await syncData();
-  };
-  
-  const deleteBill = async (id: string) => {
-      await api.delete('bills', id);
-      await syncData();
-  };
-  
-  const deleteMultipleBills = async (ids: string[]) => {
-      await api.bulkDelete('bills', ids);
-      await syncData();
-  };
-  
   const markMultiplePaid = async (ids: string[]) => {
       const paidAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
       const promises = ids.map(id => api.update('bills', id, { status: BillStatus.PAID, paidAt }));
@@ -277,66 +233,8 @@ const App: React.FC = () => {
       await syncData();
   };
 
-  const addRouter = async (r: Omit<Router, 'id' | 'status'>) => {
-      await api.insert('routers', { ...r, id: Math.random().toString(36).substr(2, 9), status: 'Offline' });
-      await syncData();
-  };
-  
-  const updateRouter = async (id: string, u: Partial<Router>) => {
-      await api.update('routers', id, u);
-      await syncData();
-  };
-
-  const deleteRouter = async (id: string) => {
-      await api.delete('routers', id);
-      await syncData();
-  };
-
-  const syncMikrotikUser = async (customerId: string, routerId: string) => {
-    const existing = mikrotikUsers.find(u => u.customerId === customerId);
-    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-    if (existing) {
-        await api.update('mikrotik_users', existing.id, { lastSynced: now, routerId, enabled: true });
-    } else {
-        const customer = customers.find(c => c.id === customerId);
-        await api.insert('mikrotik_users', {
-            id: Math.random().toString(36).substr(2, 9),
-            customerId, routerId, username: customer?.phone || 'user',
-            profile: 'default', enabled: true, lastSynced: now
-        });
-    }
-    await syncData();
-  };
-
-  const removeMikrotikUser = async (uid: string) => {
-      await api.delete('mikrotik_users', uid);
-      await syncData();
-  };
-
-  const addPaymentAccount = async (acc: Omit<PaymentAccount, 'id'>) => {
-      await api.insert('payment_accounts', { ...acc, id: Math.random().toString(36).substr(2, 9) });
-      await syncData();
-  };
-
-  const updatePaymentAccount = async (id: string, u: Partial<PaymentAccount>) => {
-      await api.update('payment_accounts', id, u);
-      await syncData();
-  };
-
-  const deletePaymentAccount = async (id: string) => {
-      await api.delete('payment_accounts', id);
-      await syncData();
-  };
-
-  const updateGatewayConfig = async (config: PaymentGatewayConfig) => {
-      await api.updateGatewayConfig(config);
-      await syncData();
-  };
-  
-  const updateAdminProfile = async (updates: AdminProfile) => {
-      await api.updateAdmin(updates);
-      await syncData();
-  };
+  const deleteBill = async (id: string) => { await api.delete('bills', id); await syncData(); };
+  const deleteMultipleBills = async (ids: string[]) => { await api.bulkDelete('bills', ids); await syncData(); };
 
   if (isLoading) {
       return (
@@ -346,83 +244,29 @@ const App: React.FC = () => {
       );
   }
 
-  if (appMode === 'landing') {
-      return <LandingPage businessName={adminProfile.businessName} onLogin={handleLogin} />;
-  }
+  if (appMode === 'landing') return <LandingPage businessName={adminProfile.businessName} onLogin={handleLogin} />;
 
   if (appMode === 'portal') {
     return (
       <CustomerPortal 
-        initialCustomer={activeCustomer}
-        customers={customers}
-        packages={packages}
-        bills={bills}
-        paymentAccounts={paymentAccounts}
-        gatewayConfig={gatewayConfig}
-        onPaymentSuccess={submitPaymentConfirmation}
-        onUpdateCustomer={updateCustomer}
-        onLogout={handleLogout}
-        isSyncing={isSyncing}
-        onManualSync={() => syncData()}
+        initialCustomer={activeCustomer} customers={customers} packages={packages}
+        bills={bills} paymentAccounts={paymentAccounts} gatewayConfig={gatewayConfig}
+        onPaymentSuccess={async (id, m) => { await api.update('bills', id, { status: BillStatus.PENDING, paymentMethod: m }); await syncData(); }}
+        onUpdateCustomer={updateCustomer} onLogout={handleLogout} isSyncing={isSyncing} onManualSync={() => syncData()}
       />
     );
   }
 
   return (
-    <Layout 
-      currentView={view} 
-      onViewChange={setView} 
-      adminProfile={adminProfile}
-      onLogout={handleLogout}
-      isSyncing={isSyncing}
-    >
-      {view === 'dashboard' && (
-        <Dashboard 
-          customers={customers} 
-          bills={bills} 
-          packages={packages} 
-          onViewChange={setView} 
-          adminProfile={adminProfile}
-          newBillsAlert={newBillsAlert}
-          onDismissNewBillsAlert={() => setNewBillsAlert(false)}
-        />
-      )}
-      {view === 'customers' && (
-        <CustomerList 
-          customers={customers} packages={packages} bills={bills}
-          onAdd={addCustomer} onUpdate={updateCustomer} 
-          onBulkStatusUpdate={bulkUpdateCustomerStatus}
-          onDelete={deleteCustomer} 
-        />
-      )}
-      {view === 'packages' && (
-        <PackageList 
-          packages={packages} onAdd={addPackage} onUpdate={updatePackage} onDelete={deletePackage}
-        />
-      )}
-      {view === 'billing' && (
-        <BillingList 
-          bills={bills} customers={customers} onGenerate={generateBills} onMarkPaid={markAsPaid}
-          onRejectPayment={rejectPayment} onMarkMultiplePaid={markMultiplePaid}
-          onDelete={deleteBill} onDeleteMultiple={deleteMultipleBills}
-        />
-      )}
-      {view === 'mikrotik' && (
-        <RouterList 
-          routers={routers} customers={customers} mikrotikUsers={mikrotikUsers}
-          onAdd={addRouter} onUpdate={updateRouter} onDelete={deleteRouter}
-          onSyncUser={syncMikrotikUser} onRemoveUser={removeMikrotikUser}
-          onTest={id => {}}
-        />
-      )}
-      {view === 'payment-settings' && (
-        <PaymentSettings 
-          accounts={paymentAccounts} gatewayConfig={gatewayConfig}
-          onAdd={addPaymentAccount} onUpdate={updatePaymentAccount} onDelete={deletePaymentAccount}
-          onUpdateGateway={updateGatewayConfig}
-        />
-      )}
-      {view === 'settings' && <AdminSettings adminProfile={adminProfile} onUpdate={updateAdminProfile} />}
+    <Layout currentView={view} onViewChange={setView} adminProfile={adminProfile} onLogout={handleLogout} isSyncing={isSyncing}>
+      {view === 'dashboard' && <Dashboard customers={customers} bills={bills} packages={packages} onViewChange={setView} adminProfile={adminProfile} newBillsAlert={newBillsAlert} onDismissNewBillsAlert={() => setNewBillsAlert(false)} />}
+      {view === 'customers' && <CustomerList customers={customers} packages={packages} bills={bills} onAdd={addCustomer} onUpdate={updateCustomer} onBulkStatusUpdate={async (ids, s) => { await Promise.all(ids.map(id => api.update('customers', id, { status: s }))); await syncData(); }} onDelete={id => { api.delete('customers', id); syncData(); }} />}
+      {view === 'packages' && <PackageList packages={packages} onAdd={async p => { await api.insert('packages', { ...p, id: Math.random().toString(36).substr(2, 9) }); await syncData(); }} onUpdate={async (id, u) => { await api.update('packages', id, u); await syncData(); }} onDelete={async id => { await api.delete('packages', id); await syncData(); }} />}
+      {view === 'billing' && <BillingList bills={bills} customers={customers} collectors={collectors} onGenerate={generateBills} onMarkPaid={markAsPaid} onRejectPayment={async id => { await api.update('bills', id, { status: BillStatus.UNPAID, paymentMethod: '' }); await syncData(); }} onMarkMultiplePaid={markMultiplePaid} onDelete={deleteBill} onDeleteMultiple={deleteMultipleBills} onAssignCollector={assignBillsToCollector} />}
+      {view === 'collectors' && <CollectorList collectors={collectors} bills={bills} onAdd={addCollector} onUpdate={updateCollector} onDelete={deleteCollector} />}
+      {view === 'mikrotik' && <RouterList routers={routers} customers={customers} mikrotikUsers={mikrotikUsers} onAdd={async r => { await api.insert('routers', { ...r, id: Math.random().toString(36).substr(2, 9), status: 'Offline' }); await syncData(); }} onUpdate={async (id, u) => { await api.update('routers', id, u); await syncData(); }} onDelete={async id => { await api.delete('routers', id); await syncData(); }} onSyncUser={async (c, r) => { await api.insert('mikrotik_users', { id: Math.random().toString(36).substr(2, 9), customerId: c, routerId: r, username: 'user', profile: 'default', enabled: true, lastSynced: new Date().toISOString() }); await syncData(); }} onRemoveUser={async id => { await api.delete('mikrotik_users', id); await syncData(); }} onTest={id => {}} />}
+      {view === 'payment-settings' && <PaymentSettings accounts={paymentAccounts} gatewayConfig={gatewayConfig} onAdd={async a => { await api.insert('payment_accounts', { ...a, id: Math.random().toString(36).substr(2, 9) }); await syncData(); }} onUpdate={async (id, u) => { await api.update('payment_accounts', id, u); await syncData(); }} onDelete={async id => { await api.delete('payment_accounts', id); await syncData(); }} onUpdateGateway={async c => { await api.updateGatewayConfig(c); await syncData(); }} />}
+      {view === 'settings' && <AdminSettings adminProfile={adminProfile} onUpdate={async u => { await api.updateAdmin(u); await syncData(); }} />}
     </Layout>
   );
 };
