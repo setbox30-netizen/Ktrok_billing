@@ -26,6 +26,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<Status | 'All'>('All');
+  const [packageFilter, setPackageFilter] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   
@@ -46,10 +47,11 @@ export const CustomerList: React.FC<CustomerListProps> = ({
 
   const filteredCustomers = customers.filter(c => {
     const matchesStatus = statusFilter === 'All' || c.status === statusFilter;
+    const matchesPackage = packageFilter === 'All' || c.packageId === packageFilter;
     const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                          c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          c.phone.includes(searchTerm);
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesPackage && matchesSearch;
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -105,7 +107,6 @@ export const CustomerList: React.FC<CustomerListProps> = ({
 
   const toggleSingleStatus = (c: Customer) => {
     const newStatus = c.status === Status.ACTIVE ? Status.SUSPENDED : Status.ACTIVE;
-    // Teks konfirmasi yang dinamis
     const actionText = newStatus === Status.ACTIVE ? 'Mengaktifkan kembali' : 'Mengisolir (Suspend)';
     
     if (confirm(`Apakah Anda yakin ingin ${actionText} layanan untuk ${c.name}?`)) {
@@ -180,16 +181,26 @@ export const CustomerList: React.FC<CustomerListProps> = ({
               className="w-full pl-10 pr-4 py-2 border-none bg-slate-50 dark:bg-slate-800 dark:text-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
             />
          </div>
-         <div className="w-full md:w-auto">
+         <div className="flex flex-col sm:flex-row gap-3">
             <select 
                value={statusFilter}
                onChange={(e) => setStatusFilter(e.target.value as any)}
-               className="w-full md:w-auto px-4 py-2 bg-slate-50 dark:bg-slate-800 dark:text-slate-200 border-none rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none min-w-[140px]"
+               className="w-full sm:w-auto px-4 py-2 bg-slate-50 dark:bg-slate-800 dark:text-slate-200 border-none rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none min-w-[140px]"
             >
                <option value="All">Semua Status</option>
                <option value={Status.ACTIVE}>Aktif</option>
                <option value={Status.SUSPENDED}>Terisolir</option>
                <option value={Status.INACTIVE}>Non-Aktif</option>
+            </select>
+            <select 
+               value={packageFilter}
+               onChange={(e) => setPackageFilter(e.target.value)}
+               className="w-full sm:w-auto px-4 py-2 bg-slate-50 dark:bg-slate-800 dark:text-slate-200 border-none rounded-xl text-sm font-bold text-slate-600 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none min-w-[160px]"
+            >
+               <option value="All">Semua Paket</option>
+               {packages.map(pkg => (
+                  <option key={pkg.id} value={pkg.id}>{pkg.name}</option>
+               ))}
             </select>
          </div>
       </div>
@@ -251,14 +262,9 @@ export const CustomerList: React.FC<CustomerListProps> = ({
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm whitespace-nowrap">
-                      {pkg ? (
-                        <div className="flex flex-col">
-                          <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs">{pkg.name}</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{pkg.speed} • {formatter.format(pkg.price)}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 dark:text-slate-600 text-xs italic">N/A</span>
-                      )}
+                      <span className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-full text-xs font-black">
+                        {pkg?.name || 'N/A'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button 
@@ -290,7 +296,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({
                 <tr>
                   <td colSpan={6} className="px-6 py-20 text-center text-slate-400 dark:text-slate-600">
                     <div className="flex flex-col items-center justify-center opacity-40">
-                       <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                       <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                        <p className="font-bold text-lg">Tidak ada pelanggan ditemukan</p>
                     </div>
                   </td>
@@ -413,7 +419,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border dark:border-slate-700 rounded-xl font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Batal</button>
                 <button type="submit" className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-colors">
-                  {editingId ? 'Simpan Perubahan' : 'Tambah Sekarang'}
+                  Simpan
                 </button>
               </div>
             </form>
