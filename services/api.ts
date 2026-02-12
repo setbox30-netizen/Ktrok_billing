@@ -26,7 +26,8 @@ const MOCK_DATA = {
     { id: 'BILL003', customerId: 'CUST001', month: '11', year: 2024, amount: 150000, status: BillStatus.UNPAID, dueDate: '2024-11-10', collectorId: 'COL01' }
   ] as Bill[],
   collectors: [
-    { id: 'COL01', name: 'Ahmad Collector', phone: '0811111111', password: '123', status: 'Active', joinedAt: '2024-01-01' }
+    { id: 'COL01', name: 'Ahmad Collector', phone: '0811111111', password: '123', status: 'Active', joinedAt: '2024-01-01' },
+    { id: 'COL02', name: 'Budi Lapangan', phone: '0822222222', password: '123', status: 'Active', joinedAt: '2024-02-01' }
   ] as Collector[],
   routers: [
     { id: 'RTR001', name: 'Mikrotik Utama', host: '192.168.1.1', port: 8728, username: 'admin', status: 'Online' }
