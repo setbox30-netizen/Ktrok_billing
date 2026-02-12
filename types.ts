@@ -48,6 +48,7 @@ export interface Collector {
   id: string;
   name: string;
   phone: string;
+  password?: string; // Ditambahkan untuk login
   status: 'Active' | 'Inactive';
   joinedAt: string;
 }
@@ -104,4 +105,4 @@ export interface PaymentGatewayConfig {
 
 export type View = 'dashboard' | 'customers' | 'packages' | 'billing' | 'collectors' | 'mikrotik' | 'settings' | 'payment-settings';
 export type PortalView = 'home' | 'history' | 'payment' | 'package' | 'profile';
-export type AppMode = 'admin' | 'portal';
+export type AppMode = 'admin' | 'portal' | 'collector';
