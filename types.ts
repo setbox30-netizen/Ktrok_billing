@@ -41,6 +41,15 @@ export interface Bill {
   dueDate: string;
   paidAt?: string;
   paymentMethod?: string;
+  collectorId?: string; // Menghubungkan ke petugas penagih
+}
+
+export interface Collector {
+  id: string;
+  name: string;
+  phone: string;
+  status: 'Active' | 'Inactive';
+  joinedAt: string;
 }
 
 export interface Router {
@@ -77,7 +86,7 @@ export type PaymentType = 'BANK' | 'E-WALLET' | 'QRIS';
 export interface PaymentAccount {
   id: string;
   type: PaymentType;
-  providerName: string; // BCA, OVO, DANA, ShopeePay, QRIS
+  providerName: string; 
   accountNumber: string;
   accountHolder: string;
 }
@@ -93,6 +102,6 @@ export interface PaymentGatewayConfig {
   isSandbox: boolean;
 }
 
-export type View = 'dashboard' | 'customers' | 'packages' | 'billing' | 'mikrotik' | 'settings' | 'payment-settings';
+export type View = 'dashboard' | 'customers' | 'packages' | 'billing' | 'collectors' | 'mikrotik' | 'settings' | 'payment-settings';
 export type PortalView = 'home' | 'history' | 'payment' | 'package' | 'profile';
 export type AppMode = 'admin' | 'portal';
