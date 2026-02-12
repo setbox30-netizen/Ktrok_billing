@@ -41,6 +41,26 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
 
+  // Dark Mode Logic
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+
   useEffect(() => {
     setCustomer(initialCustomer);
   }, [initialCustomer]);
@@ -190,14 +210,14 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
        </div>
 
        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border dark:border-slate-800 shadow-sm">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border dark:border-slate-800 shadow-sm transition-colors">
              <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Status Akun</p>
              <div className="flex items-center gap-2">
                 <span className={`w-3 h-3 rounded-full ${customer.status === Status.ACTIVE ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                 <span className="font-black text-slate-800 dark:text-slate-100 text-sm">{customer.status}</span>
              </div>
           </div>
-          <button onClick={() => setView('package')} className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border dark:border-slate-800 shadow-sm text-left hover:border-indigo-200 transition-all active:scale-95 group">
+          <button onClick={() => setView('package')} className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border dark:border-slate-800 shadow-sm text-left hover:border-indigo-200 transition-all active:scale-95 group transition-colors">
              <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Paket WiFi</p>
              <div className="flex items-center justify-between">
                 <p className="font-black text-indigo-600 dark:text-indigo-400 truncate text-sm mr-2">{myPackage?.name || '...'}</p>
@@ -223,7 +243,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
           </div>
        )}
 
-       <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm">
+       <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm transition-colors">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
@@ -266,7 +286,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
           {isSyncing && <span className="text-[10px] font-black text-indigo-500 animate-pulse">Syncing...</span>}
        </div>
        {myBills.length > 0 ? myBills.slice().reverse().map(b => (
-          <div key={b.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-200 transition-all active:scale-95 group">
+          <div key={b.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-200 transition-all active:scale-95 group transition-colors">
              <div>
                 <p className="font-black text-slate-800 dark:text-slate-100 text-sm">{formatter.format(b.amount + (b.penaltyAmount || 0))}</p>
                 <p className="text-[10px] text-slate-400 font-bold uppercase">{months[parseInt(b.month)-1]} {b.year} <span className="text-indigo-600 mx-1">•</span> ID: #{b.id.substring(0,6).toUpperCase()}</p>
@@ -294,7 +314,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
              </div>
           </div>
        )) : (
-          <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 opacity-50">
+          <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 opacity-50 transition-colors">
              <p className="font-bold text-slate-400 text-sm">Tidak ditemukan data tagihan.</p>
           </div>
        )}
@@ -312,7 +332,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
 
     return (
        <div className="animate-in fade-in zoom-in duration-300 pb-20">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-xl relative">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-xl relative transition-colors">
              <button onClick={() => setView('history')} className="absolute top-5 left-5 text-slate-400 hover:text-indigo-600 p-2">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
              </button>
@@ -403,7 +423,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Akun & Keamanan</h3>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm">
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm transition-colors">
         <h4 className="font-black text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2 text-sm">
           <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
           Ubah Password Login
@@ -429,7 +449,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
         </form>
       </div>
 
-      <div className="bg-slate-100 dark:bg-slate-900 border dark:border-slate-800 p-5 rounded-[1.5rem] flex flex-col gap-3">
+      <div className="bg-slate-100 dark:bg-slate-900 border dark:border-slate-800 p-5 rounded-[1.5rem] flex flex-col gap-3 transition-colors">
          <div className="flex justify-between items-center pb-2 border-b dark:border-slate-800">
             <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Informasi Kontak</span>
             <span className="text-indigo-600 font-black text-[10px] uppercase">Terverifikasi</span>
@@ -449,13 +469,20 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-inter select-none">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-inter select-none transition-colors duration-300">
        <header className="bg-white dark:bg-slate-900 px-5 py-4 border-b dark:border-slate-800 flex items-center justify-between sticky top-0 z-40 shadow-sm transition-colors duration-300">
           <div className="flex items-center gap-2">
              <div className="w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-lg shadow-indigo-200 dark:shadow-none">W</div>
              <span className="font-black text-slate-800 dark:text-slate-100 tracking-tighter text-sm">{businessName} Portal</span>
           </div>
           <div className="flex items-center gap-3">
+             <button onClick={() => setIsDark(!isDark)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
+                {isDark ? (
+                  <svg className="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 5a7 7 0 100 14 7 7 0 000-14z"/></svg>
+                ) : (
+                  <svg className="w-4 h-4 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M21 12.75a8.986 8.986 0 01-8.25 8.25c-4.836 0-8.75-3.914-8.75-8.75s3.914-8.75 8.75-8.75c.42 0 .826.03 1.226.086A6.25 6.25 0 005.75 12.25c0 3.452 2.798 6.25 6.25 6.25 2.126 0 3.996-1.06 5.126-2.686a8.964 8.964 0 013.874 6.936z"/></svg>
+                )}
+             </button>
              {isSyncing && <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></div>}
              <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-white dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-black text-[10px]">
                {customer.name.charAt(0)}
@@ -471,7 +498,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
           {view === 'profile' && renderProfile()}
        </div>
 
-       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t dark:border-slate-800 px-6 py-3 flex justify-between z-40 max-w-xl mx-auto shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.1)] pb-safe-area">
+       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t dark:border-slate-800 px-6 py-3 flex justify-between z-40 max-w-xl mx-auto shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.1)] pb-safe-area transition-colors">
           {[
             { id: 'home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
             { id: 'package', label: 'Paket', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
