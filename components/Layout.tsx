@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { View, AdminProfile } from '../types';
 
 interface LayoutProps {
+  // Fix: change React.Node to React.ReactNode as 'Node' is not a member of 'React' in TypeScript
   children: React.ReactNode;
   currentView: View;
   onViewChange: (view: View) => void;
@@ -66,7 +67,7 @@ export const Layout: React.FC<LayoutProps> = ({
   ];
 
   const navItems = role === 'collector' 
-    ? allNavItems.filter(item => item.id === 'dashboard' || item.id === 'billing') 
+    ? allNavItems.filter(item => item.id === 'dashboard' || item.id === 'billing' || item.id === 'settings') 
     : allNavItems;
 
   const handleNavClick = (viewId: View) => {
