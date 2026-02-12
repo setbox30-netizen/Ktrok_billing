@@ -10,6 +10,7 @@ interface CustomerListProps {
   onUpdate: (id: string, updates: Partial<Customer>) => void;
   onBulkStatusUpdate: (ids: string[], status: Status) => void;
   onDelete: (id: string) => void;
+  isCollector?: boolean;
 }
 
 export const CustomerList: React.FC<CustomerListProps> = ({ 
@@ -19,7 +20,8 @@ export const CustomerList: React.FC<CustomerListProps> = ({
   onAdd, 
   onUpdate, 
   onBulkStatusUpdate, 
-  onDelete 
+  onDelete,
+  isCollector = false
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
@@ -65,6 +67,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({
   };
 
   const openEdit = (c: Customer) => {
+    if (isCollector) return;
     setEditingId(c.id);
     setFormData({
       name: c.name,
@@ -83,12 +86,14 @@ export const CustomerList: React.FC<CustomerListProps> = ({
   };
 
   const toggleSelect = (id: string) => {
+    if (isCollector) return;
     setSelectedIds(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
   };
 
   const toggleSelectAll = () => {
+    if (isCollector) return;
     if (selectedIds.length === filteredCustomers.length && filteredCustomers.length > 0) {
       setSelectedIds([]);
     } else {
@@ -97,7 +102,7 @@ export const CustomerList: React.FC<CustomerListProps> = ({
   };
 
   const handleBulkStatus = (status: Status) => {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 || isCollector) return;
     if (confirm(`Ubah status ${selectedIds.length} pelanggan terpilih menjadi ${status}?`)) {
       onBulkStatusUpdate(selectedIds, status);
       setSelectedIds([]);
@@ -106,12 +111,18 @@ export const CustomerList: React.FC<CustomerListProps> = ({
   };
 
   const toggleSingleStatus = (c: Customer) => {
+    if (isCollector) return;
     const newStatus = c.status === Status.ACTIVE ? Status.SUSPENDED : Status.ACTIVE;
     const actionText = newStatus === Status.ACTIVE ? 'Mengaktifkan kembali' : 'Mengisolir (Suspend)';
     
     if (confirm(`Apakah Anda yakin ingin ${actionText} layanan untuk ${c.name}?`)) {
         onUpdate(c.id, { status: newStatus });
     }
+  };
+
+  const handleWhatsAppChat = (phone: string, name: string) => {
+    const msg = `Halo Bapak/Ibu ${name}, saya petugas lapangan dari WIFINET. Ada hal yang ingin saya tanyakan terkait layanan internet Anda. Terima kasih.`;
+    window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const months = [
@@ -123,51 +134,54 @@ export const CustomerList: React.FC<CustomerListProps> = ({
     <div className="space-y-6 animate-in fade-in duration-500 pb-20 md:pb-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Manajemen Pelanggan</h2>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            {isCollector ? 'Daftar Pelanggan Network' : 'Manajemen Pelanggan'}
+          </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm">Total {customers.length} pelanggan terdaftar</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {selectedIds.length > 0 && (
-            <div className="relative z-20">
-               <button 
-                  onClick={() => setShowBulkMenu(!showBulkMenu)}
-                  className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg transition-all animate-in fade-in text-sm"
-               >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                  Bulk ({selectedIds.length})
-                  <svg className={`w-4 h-4 transition-transform ${showBulkMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
-               </button>
-               
-               {showBulkMenu && (
-                 <div className="absolute top-full left-0 md:left-auto md:right-0 mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-150">
-                    <p className="px-4 py-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b dark:border-slate-700 mb-1">Ubah Status Menjadi:</p>
-                    <button onClick={() => handleBulkStatus(Status.ACTIVE)} className="w-full text-left px-4 py-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors flex items-center gap-3">
-                       <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Aktifkan
-                    </button>
-                    <button onClick={() => handleBulkStatus(Status.SUSPENDED)} className="w-full text-left px-4 py-3 text-sm font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors flex items-center gap-3">
-                       <span className="w-2 h-2 rounded-full bg-amber-500"></span> Isolir
-                    </button>
-                    <button onClick={() => handleBulkStatus(Status.INACTIVE)} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950/30 transition-colors flex items-center gap-3">
-                       <span className="w-2 h-2 rounded-full bg-slate-400"></span> Non-Aktif
-                    </button>
-                    <div className="border-t dark:border-slate-700 mt-1">
-                       <button onClick={() => setSelectedIds([])} className="w-full text-left px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors flex items-center gap-3">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg> Batal
-                       </button>
-                    </div>
-                 </div>
-               )}
-            </div>
-          )}
-          <button 
-            onClick={() => setShowModal(true)}
-            className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 font-medium shadow-lg transition-all active:scale-95 text-sm"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-            <span className="md:hidden">Baru</span>
-            <span className="hidden md:inline">Pelanggan Baru</span>
-          </button>
-        </div>
+        {!isCollector && (
+          <div className="flex flex-wrap gap-2">
+            {selectedIds.length > 0 && (
+              <div className="relative z-20">
+                 <button 
+                    onClick={() => setShowBulkMenu(!showBulkMenu)}
+                    className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold shadow-lg transition-all animate-in fade-in text-sm"
+                 >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    Bulk ({selectedIds.length})
+                    <svg className={`w-4 h-4 transition-transform ${showBulkMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                 </button>
+                 
+                 {showBulkMenu && (
+                   <div className="absolute top-full left-0 md:left-auto md:right-0 mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-2xl shadow-2xl py-2 overflow-hidden animate-in fade-in zoom-in duration-150">
+                      <p className="px-4 py-2 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b dark:border-slate-700 mb-1">Ubah Status Menjadi:</p>
+                      <button onClick={() => handleBulkStatus(Status.ACTIVE)} className="w-full text-left px-4 py-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors flex items-center gap-3">
+                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Aktifkan
+                      </button>
+                      <button onClick={() => handleBulkStatus(Status.SUSPENDED)} className="w-full text-left px-4 py-3 text-sm font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors flex items-center gap-3">
+                         <span className="w-2 h-2 rounded-full bg-amber-500"></span> Isolir
+                      </button>
+                      <button onClick={() => handleBulkStatus(Status.INACTIVE)} className="w-full text-left px-4 py-3 text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-950/30 transition-colors flex items-center gap-3">
+                         <span className="w-2 h-2 rounded-full bg-slate-400"></span> Non-Aktif
+                      </button>
+                      <div className="border-t dark:border-slate-700 mt-1">
+                         <button onClick={() => setSelectedIds([])} className="w-full text-left px-4 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors flex items-center gap-3">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg> Batal
+                         </button>
+                      </div>
+                   </div>
+                 )}
+              </div>
+            )}
+            <button 
+              onClick={() => setShowModal(true)}
+              className="flex-1 md:flex-none bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 font-medium shadow-lg transition-all active:scale-95 text-sm"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              Pelanggan Baru
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-4">
@@ -210,14 +224,16 @@ export const CustomerList: React.FC<CustomerListProps> = ({
           <table className="w-full text-left">
             <thead className="bg-slate-50 dark:bg-slate-800/50 border-b dark:border-slate-800">
               <tr>
-                <th className="px-6 py-4 w-10">
-                  <input 
-                    type="checkbox" 
-                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer border-slate-300 dark:border-slate-700 dark:bg-slate-900" 
-                    onChange={toggleSelectAll}
-                    checked={filteredCustomers.length > 0 && selectedIds.length === filteredCustomers.length}
-                  />
-                </th>
+                {!isCollector && (
+                  <th className="px-6 py-4 w-10">
+                    <input 
+                      type="checkbox" 
+                      className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer border-slate-300 dark:border-slate-700 dark:bg-slate-900" 
+                      onChange={toggleSelectAll}
+                      checked={filteredCustomers.length > 0 && selectedIds.length === filteredCustomers.length}
+                    />
+                  </th>
+                )}
                 <th className="px-6 py-4 font-black text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">Nama Pelanggan</th>
                 <th className="px-6 py-4 font-black text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">Kontak & Alamat</th>
                 <th className="px-6 py-4 font-black text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest whitespace-nowrap">Paket</th>
@@ -232,14 +248,16 @@ export const CustomerList: React.FC<CustomerListProps> = ({
                 const isActive = c.status === Status.ACTIVE;
                 return (
                   <tr key={c.id} className={`transition-all duration-200 ${isSelected ? 'bg-indigo-50/70 dark:bg-indigo-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'} ${!isActive && !isSelected ? 'opacity-70 grayscale-[0.5] hover:opacity-100 hover:grayscale-0' : ''}`}>
-                    <td className="px-6 py-4">
-                      <input 
-                        type="checkbox" 
-                        className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer border-slate-300 dark:border-slate-700 dark:bg-slate-900" 
-                        checked={isSelected}
-                        onChange={() => toggleSelect(c.id)}
-                      />
-                    </td>
+                    {!isCollector && (
+                      <td className="px-6 py-4">
+                        <input 
+                          type="checkbox" 
+                          className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer border-slate-300 dark:border-slate-700 dark:bg-slate-900" 
+                          checked={isSelected}
+                          onChange={() => toggleSelect(c.id)}
+                        />
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${isActive ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
@@ -268,33 +286,38 @@ export const CustomerList: React.FC<CustomerListProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button 
+                        disabled={isCollector}
                         onClick={() => toggleSingleStatus(c)}
-                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 ${
-                        c.status === Status.ACTIVE ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200' : 
-                        c.status === Status.SUSPENDED ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400 hover:bg-slate-200'
+                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${!isCollector ? 'hover:scale-105 active:scale-95' : ''} ${
+                        c.status === Status.ACTIVE ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
+                        c.status === Status.SUSPENDED ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400'
                       }`}>
                         {c.status}
                       </button>
                     </td>
                     <td className="px-6 py-4 text-right space-x-1 whitespace-nowrap">
-                      <button onClick={() => toggleSingleStatus(c)} title={isActive ? "Matikan" : "Aktifkan"} className={`${isActive ? 'text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100'} p-2 rounded-lg transition-colors`}>
-                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      <button onClick={() => handleWhatsAppChat(c.phone, c.name)} title="WhatsApp" className="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                       </button>
                       <button onClick={() => setHistoryCustomer(c)} title="Riwayat" className="text-amber-600 dark:text-amber-400 hover:text-amber-900 p-2 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                       </button>
-                      <button onClick={() => openEdit(c)} title="Edit" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                      </button>
-                      <button onClick={() => onDelete(c.id)} title="Hapus" className="text-rose-600 dark:text-rose-400 hover:text-rose-900 p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                      </button>
+                      {!isCollector && (
+                        <>
+                          <button onClick={() => openEdit(c)} title="Edit" className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                          </button>
+                          <button onClick={() => onDelete(c.id)} title="Hapus" className="text-rose-600 dark:text-rose-400 hover:text-rose-900 p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 );
               }) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-20 text-center text-slate-400 dark:text-slate-600">
+                  <td colSpan={isCollector ? 5 : 6} className="px-6 py-20 text-center text-slate-400 dark:text-slate-600">
                     <div className="flex flex-col items-center justify-center opacity-40">
                        <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                        <p className="font-bold text-lg">Tidak ada pelanggan ditemukan</p>
@@ -375,8 +398,8 @@ export const CustomerList: React.FC<CustomerListProps> = ({
         </div>
       )}
 
-      {/* Modal Form Pelanggan */}
-      {showModal && (
+      {/* Modal Form Pelanggan - Only show for Admin */}
+      {showModal && !isCollector && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in duration-200 border dark:border-slate-800">
             <div className="px-6 py-4 bg-indigo-600 text-white flex justify-between items-center sticky top-0 z-10">
