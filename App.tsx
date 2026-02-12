@@ -51,6 +51,9 @@ const App: React.FC = () => {
   const [gatewayConfig, setGatewayConfig] = useState<PaymentGatewayConfig>(INITIAL_GATEWAY);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Notification state for new bills
+  const [newBillsAlert, setNewBillsAlert] = useState(false);
 
   // Load and Sync Data Function
   const syncData = useCallback(async (isInitial = false) => {
@@ -230,6 +233,9 @@ const App: React.FC = () => {
             await api.insert('bills', bill);
         }
     }
+    if (newBills.length > 0) {
+      setNewBillsAlert(true);
+    }
     await syncData();
   };
 
@@ -370,7 +376,17 @@ const App: React.FC = () => {
       onLogout={handleLogout}
       isSyncing={isSyncing}
     >
-      {view === 'dashboard' && <Dashboard customers={customers} bills={bills} packages={packages} onViewChange={setView} adminProfile={adminProfile} />}
+      {view === 'dashboard' && (
+        <Dashboard 
+          customers={customers} 
+          bills={bills} 
+          packages={packages} 
+          onViewChange={setView} 
+          adminProfile={adminProfile}
+          newBillsAlert={newBillsAlert}
+          onDismissNewBillsAlert={() => setNewBillsAlert(false)}
+        />
+      )}
       {view === 'customers' && (
         <CustomerList 
           customers={customers} packages={packages} bills={bills}
