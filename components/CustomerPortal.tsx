@@ -15,6 +15,7 @@ interface CustomerPortalProps {
   onLogout: () => void;
   isSyncing?: boolean;
   onManualSync?: () => void;
+  businessName?: string;
 }
 
 export const CustomerPortal: React.FC<CustomerPortalProps> = ({ 
@@ -28,7 +29,8 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   onUpdateCustomer,
   onLogout,
   isSyncing = false,
-  onManualSync
+  onManualSync,
+  businessName = "WIFINET"
 }) => {
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [view, setView] = useState<PortalView>('home');
@@ -53,6 +55,90 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   const myBills = bills.filter(b => b.customerId === customer?.id);
   const unpaidBills = myBills.filter(b => b.status === BillStatus.UNPAID);
   const myPackage = packages.find(p => p.id === customer?.packageId);
+
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  const handlePrint = (bill: Bill) => {
+    const pkg = packages.find(p => p.id === customer?.packageId);
+    
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (!printWindow) return;
+
+    const receiptHtml = `
+      <html>
+        <head>
+          <title>Bukti Bayar - ${bill.id}</title>
+          <style>
+            @page { margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              width: 58mm; 
+              padding: 5mm; 
+              font-size: 12px;
+              color: #000;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .border-top { border-top: 1px dashed #000; margin-top: 5px; padding-top: 5px; }
+            .flex { display: flex; justify-content: space-between; }
+            .mt-2 { margin-top: 8px; }
+            .status { 
+                border: 2px solid #000; 
+                display: inline-block; 
+                padding: 2px 10px; 
+                font-weight: bold; 
+                margin-top: 10px;
+            }
+          </style>
+        </head>
+        <body onload="window.print();window.close()">
+          <div class="center bold" style="font-size: 16px;">${businessName}</div>
+          <div class="center">--------------------------------</div>
+          
+          <div class="mt-2">
+            <div class="flex"><span>Tgl Bayar:</span> <span>${bill.paidAt ? bill.paidAt.split(' ')[0] : '-'}</span></div>
+            <div class="flex"><span>No Struk:</span> <span>#${bill.id.substring(0, 8).toUpperCase()}</span></div>
+            <div class="flex"><span>Nama:</span> <span class="bold">${customer?.name.substring(0, 15)}</span></div>
+          </div>
+
+          <div class="border-top mt-2">
+            <div class="bold">PEMBAYARAN:</div>
+            <div class="flex mt-1">
+              <span>Paket ${pkg?.name || 'WiFi'}</span>
+              <span>${formatter.format(bill.amount)}</span>
+            </div>
+            ${bill.penaltyAmount ? `
+              <div class="flex">
+                <span>Denda</span>
+                <span>${formatter.format(bill.penaltyAmount)}</span>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="border-top mt-2">
+            <div class="flex bold">
+              <span>TOTAL BAYAR</span>
+              <span>${formatter.format(bill.amount + (bill.penaltyAmount || 0))}</span>
+            </div>
+          </div>
+
+          <div class="center mt-2">
+            <div class="status">LUNAS / PAID</div>
+          </div>
+
+          <div class="center mt-2" style="font-size: 10px;">
+            Bukti bayar elektronik sah.<br>Terima kasih.
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(receiptHtml);
+    printWindow.document.close();
+  };
 
   const handleRequestChange = (pkg: Package) => {
     const isUpgrade = pkg.price > (myPackage?.price || 0);
@@ -153,13 +239,18 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
                    <p className="font-black text-slate-800 dark:text-slate-100 text-lg">{formatter.format(myBills[myBills.length-1].amount + (myBills[myBills.length-1].penaltyAmount || 0))}</p>
                    <p className="text-slate-400 text-[10px] font-bold">Periode: {myBills[myBills.length-1].month}/{myBills[myBills.length-1].year}</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                   myBills[myBills.length-1].status === BillStatus.PAID ? 'bg-emerald-100 text-emerald-700' : 
-                   myBills[myBills.length-1].status === BillStatus.PENDING ? 'bg-amber-100 text-amber-700 animate-pulse' :
-                   'bg-rose-100 text-rose-700'
-                }`}>
-                   {myBills[myBills.length-1].status}
-                </span>
+                <div className="flex flex-col items-end gap-2">
+                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                    myBills[myBills.length-1].status === BillStatus.PAID ? 'bg-emerald-100 text-emerald-700' : 
+                    myBills[myBills.length-1].status === BillStatus.PENDING ? 'bg-amber-100 text-amber-700 animate-pulse' :
+                    'bg-rose-100 text-rose-700'
+                    }`}>
+                    {myBills[myBills.length-1].status}
+                    </span>
+                    {myBills[myBills.length-1].status === BillStatus.PAID && (
+                        <button onClick={() => handlePrint(myBills[myBills.length-1])} className="text-indigo-600 dark:text-indigo-400 font-black text-[9px] uppercase tracking-tighter hover:underline">CETAK STRUK</button>
+                    )}
+                </div>
              </div>
           ) : (
              <p className="text-center text-slate-400 text-xs py-4 italic">Belum ada riwayat pembayaran.</p>
@@ -175,10 +266,10 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
           {isSyncing && <span className="text-[10px] font-black text-indigo-500 animate-pulse">Syncing...</span>}
        </div>
        {myBills.length > 0 ? myBills.slice().reverse().map(b => (
-          <div key={b.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-200 transition-all active:scale-95">
+          <div key={b.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-200 transition-all active:scale-95 group">
              <div>
                 <p className="font-black text-slate-800 dark:text-slate-100 text-sm">{formatter.format(b.amount + (b.penaltyAmount || 0))}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase">{b.month}/{b.year} <span className="text-indigo-600 mx-1">•</span> ID: #{b.id.substring(0,6).toUpperCase()}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">{months[parseInt(b.month)-1]} {b.year} <span className="text-indigo-600 mx-1">•</span> ID: #{b.id.substring(0,6).toUpperCase()}</p>
              </div>
              <div className="text-right flex flex-col items-end gap-2">
                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
@@ -188,11 +279,18 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
                 }`}>
                    {b.status === BillStatus.PENDING ? 'MENUNGGU' : b.status}
                 </span>
-                {b.status === BillStatus.UNPAID && (
-                   <button onClick={() => { setPayingBill(b); setView('payment'); }} className="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md active:scale-90 transition-transform">
-                      BAYAR
-                   </button>
-                )}
+                <div className="flex gap-2">
+                    {b.status === BillStatus.PAID && (
+                       <button onClick={(e) => { e.stopPropagation(); handlePrint(b); }} className="text-indigo-600 p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg hover:bg-indigo-100 transition-all" title="Cetak Bukti">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                       </button>
+                    )}
+                    {b.status === BillStatus.UNPAID && (
+                       <button onClick={() => { setPayingBill(b); setView('payment'); }} className="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md active:scale-90 transition-transform">
+                          BAYAR
+                       </button>
+                    )}
+                </div>
              </div>
           </div>
        )) : (
@@ -355,7 +453,7 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
        <header className="bg-white dark:bg-slate-900 px-5 py-4 border-b dark:border-slate-800 flex items-center justify-between sticky top-0 z-40 shadow-sm transition-colors duration-300">
           <div className="flex items-center gap-2">
              <div className="w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-lg shadow-indigo-200 dark:shadow-none">W</div>
-             <span className="font-black text-slate-800 dark:text-slate-100 tracking-tighter text-sm">WIFINET PORTAL</span>
+             <span className="font-black text-slate-800 dark:text-slate-100 tracking-tighter text-sm">{businessName} Portal</span>
           </div>
           <div className="flex items-center gap-3">
              {isSyncing && <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></div>}
