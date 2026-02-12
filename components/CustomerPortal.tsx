@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Customer, Bill, Package, BillStatus, Status, PortalView, PaymentAccount, PaymentGatewayConfig } from '../types';
 
 interface CustomerPortalProps {
@@ -13,6 +13,8 @@ interface CustomerPortalProps {
   onGatewayPaymentSuccess?: (billId: string, method: string) => void;
   onUpdateCustomer: (id: string, updates: Partial<Customer>) => void;
   onLogout: () => void;
+  isSyncing?: boolean;
+  onManualSync?: () => void;
 }
 
 export const CustomerPortal: React.FC<CustomerPortalProps> = ({ 
@@ -23,17 +25,16 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   paymentAccounts,
   gatewayConfig,
   onPaymentSuccess,
-  onGatewayPaymentSuccess,
   onUpdateCustomer,
-  onLogout 
+  onLogout,
+  isSyncing = false,
+  onManualSync
 }) => {
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [view, setView] = useState<PortalView>('home');
   const [payingBill, setPayingBill] = useState<Bill | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
-
-  // Profile / Password state
+  
   const [oldPasswordInput, setOldPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
@@ -56,465 +57,335 @@ export const CustomerPortal: React.FC<CustomerPortalProps> = ({
   const handleRequestChange = (pkg: Package) => {
     const isUpgrade = pkg.price > (myPackage?.price || 0);
     const action = isUpgrade ? 'Upgrade' : 'Downgrade';
-    if (confirm(`Ajukan ${action} ke paket ${pkg.name}?`)) {
-      alert(`Permintaan ${action} terkirim! Admin akan menghubungi Anda.`);
+    if (confirm(`Apakah Anda yakin ingin mengajukan ${action} ke paket ${pkg.name}? Permintaan Anda akan segera diproses oleh Admin.`)) {
+      alert(`Permintaan ${action} ke ${pkg.name} telah dikirim! Tim kami akan menghubungi Anda melalui WhatsApp di nomor ${customer?.phone}.`);
     }
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(text);
-    setTimeout(() => setCopiedText(null), 2000);
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customer) return;
-
-    if (customer.password && oldPasswordInput !== customer.password) {
-      alert('Password lama salah!');
-      return;
-    }
-    if (newPasswordInput.length < 6) {
-      alert('Password baru minimal 6 karakter!');
-      return;
-    }
-    if (newPasswordInput !== confirmPasswordInput) {
-      alert('Konfirmasi password baru tidak cocok!');
-      return;
-    }
-
+    if (customer.password && oldPasswordInput !== customer.password) { alert('Password lama salah!'); return; }
+    if (newPasswordInput.length < 6) { alert('Password baru minimal 6 karakter!'); return; }
+    if (newPasswordInput !== confirmPasswordInput) { alert('Konfirmasi password baru tidak cocok!'); return; }
     onUpdateCustomer(customer.id, { password: newPasswordInput });
     setCustomer({ ...customer, password: newPasswordInput });
-    setOldPasswordInput('');
-    setNewPasswordInput('');
-    setConfirmPasswordInput('');
+    setOldPasswordInput(''); setNewPasswordInput(''); setConfirmPasswordInput('');
     alert('Password berhasil diperbarui!');
     setView('home');
   };
 
   if (!customer) {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-500">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 text-slate-500">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                <p>Memuat Data Pelanggan...</p>
+            </div>
         </div>
     );
   }
 
-  // --- SUB COMPONENTS FOR CLEANER RENDER ---
-
-  const Header = ({ title, showBack = false }: { title: string, showBack?: boolean }) => (
-    <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-4 flex items-center justify-between">
-       <div className="flex items-center gap-3">
-          {showBack && (
-            <button onClick={() => setView('home')} className="p-1 -ml-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-              <svg className="w-6 h-6 text-slate-600 dark:text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
-            </button>
-          )}
-          <h2 className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{title}</h2>
-       </div>
-       {!showBack && (
-         <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/50 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-xs">
-           {customer.name.charAt(0)}
-         </div>
-       )}
-    </div>
-  );
-
   const renderHome = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-32">
-       {/* Hero Member Card */}
-       <div className="relative w-full h-52 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-indigo-500/20 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-800"></div>
-          {/* Decorative Circles */}
-          <div className="absolute top-[-50px] right-[-50px] w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-[-30px] left-[-30px] w-32 h-32 bg-indigo-400/20 rounded-full blur-2xl"></div>
-          
-          <div className="absolute inset-0 p-8 flex flex-col justify-between z-10">
-             <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-1">Member Card</p>
-                  <h1 className="text-2xl font-black text-white tracking-tight">{customer.name}</h1>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md border border-white/20 ${customer.status === Status.ACTIVE ? 'bg-emerald-500/20 text-emerald-100' : 'bg-rose-500/20 text-rose-100'}`}>
-                  {customer.status}
-                </div>
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+       <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[2rem] p-6 text-white shadow-xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-10 -translate-y-10 group-hover:scale-150 transition-transform duration-700"></div>
+          <div className="relative z-10">
+             <div className="flex justify-between items-start mb-2">
+                <p className="text-indigo-100 font-bold uppercase tracking-widest text-[10px]">Selamat Datang,</p>
+                {isSyncing && <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>}
              </div>
-             
-             <div className="space-y-4">
-                <div className="flex items-end gap-1">
-                   <span className="text-white/60 text-xs font-medium mb-1">ID Pelanggan</span>
-                   <p className="text-xl font-mono text-white tracking-wider">{customer.id}</p>
-                </div>
-                <div className="h-px w-full bg-gradient-to-r from-white/30 to-transparent"></div>
-                <div className="flex justify-between items-center">
-                   <div>
-                      <p className="text-indigo-200 text-[10px] font-bold uppercase">Paket Aktif</p>
-                      <p className="text-white font-bold text-sm">{myPackage?.name || 'Loading...'}</p>
-                   </div>
-                   <div>
-                      <p className="text-indigo-200 text-[10px] font-bold uppercase text-right">Kecepatan</p>
-                      <p className="text-white font-bold text-sm text-right">{myPackage?.speed || '-'}</p>
-                   </div>
-                </div>
+             <h2 className="text-2xl font-black mb-1 truncate pr-8">{customer.name}</h2>
+             <p className="text-indigo-100 text-xs font-medium bg-white/20 inline-block px-2 py-1 rounded-lg backdrop-blur-sm">ID: {customer.id}</p>
+          </div>
+          <button onClick={() => setView('profile')} className="absolute top-6 right-6 bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors backdrop-blur-md">
+             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924-1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </button>
+       </div>
+
+       <div className="grid grid-cols-2 gap-3">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border dark:border-slate-800 shadow-sm">
+             <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Status Akun</p>
+             <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${customer.status === Status.ACTIVE ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                <span className="font-black text-slate-800 dark:text-slate-100 text-sm">{customer.status}</span>
              </div>
           </div>
+          <button onClick={() => setView('package')} className="bg-white dark:bg-slate-900 p-5 rounded-[1.5rem] border dark:border-slate-800 shadow-sm text-left hover:border-indigo-200 transition-all active:scale-95 group">
+             <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Paket WiFi</p>
+             <div className="flex items-center justify-between">
+                <p className="font-black text-indigo-600 dark:text-indigo-400 truncate text-sm mr-2">{myPackage?.name || '...'}</p>
+                <svg className="w-4 h-4 text-indigo-400 shrink-0 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+             </div>
+          </button>
        </div>
 
-       {/* Billing Status Widget */}
-       <div className="grid grid-cols-1 gap-4">
-         {unpaidBills.length > 0 ? (
-           <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-rose-100 dark:border-rose-900/50 shadow-lg shadow-rose-100/50 dark:shadow-none relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/10 rounded-bl-[3rem] -mr-4 -mt-4"></div>
-              <div className="relative z-10">
-                 <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-xl">
-                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    </div>
-                    <h3 className="font-black text-rose-600 dark:text-rose-400 text-lg">Tagihan Belum Lunas</h3>
-                 </div>
-                 <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">Anda memiliki <strong className="text-slate-800 dark:text-slate-200">{unpaidBills.length} tagihan</strong> yang belum dibayarkan.</p>
-                 <button 
-                   onClick={() => setView('history')}
-                   className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black shadow-lg shadow-rose-200 dark:shadow-none active:scale-95 transition-all flex items-center justify-center gap-2"
-                 >
-                    BAYAR SEKARANG <span className="font-mono">{formatter.format(unpaidBills.reduce((a,b) => a+b.amount, 0))}</span>
-                 </button>
-              </div>
-           </div>
-         ) : (
-           <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-emerald-100 dark:border-emerald-900/50 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0">
-                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              </div>
-              <div>
-                 <h3 className="font-black text-emerald-600 dark:text-emerald-400">Tagihan Lunas</h3>
-                 <p className="text-slate-400 text-xs font-medium">Terima kasih telah melakukan pembayaran tepat waktu.</p>
-              </div>
-           </div>
-         )}
-       </div>
+       {unpaidBills.length > 0 ? (
+          <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/50 p-5 rounded-[1.5rem] flex items-center justify-between animate-in zoom-in duration-300">
+             <div>
+                <p className="text-rose-600 dark:text-rose-400 font-black text-sm">{unpaidBills.length} Tagihan Belum Dibayar</p>
+                <p className="text-rose-400 dark:text-rose-500 text-[10px] mt-0.5">Ketuk untuk melunasi</p>
+             </div>
+             <button onClick={() => setView('history')} className="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-rose-200 dark:shadow-none hover:scale-105 transition-transform active:scale-95">
+                BAYAR
+             </button>
+          </div>
+       ) : (
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 p-5 rounded-[1.5rem] text-center">
+             <p className="text-emerald-700 dark:text-emerald-400 font-black text-sm">Tagihan Lunas! ✨</p>
+             <p className="text-emerald-500 dark:text-emerald-600 text-[10px]">Layanan berjalan normal.</p>
+          </div>
+       )}
 
-       {/* Menu Grid */}
-       <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setView('package')} className="bg-white dark:bg-slate-900 p-5 rounded-3xl border dark:border-slate-800 shadow-sm hover:border-indigo-200 transition-all group text-left">
-             <div className="w-10 h-10 bg-indigo-50 dark:bg-slate-800 text-indigo-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+       <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm">
+               <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+               Transaksi Terakhir
+            </h3>
+            <button onClick={onManualSync} className={`p-1 text-slate-400 hover:text-indigo-600 transition-all ${isSyncing ? 'animate-spin' : ''}`}>
+               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </div>
+          {myBills.length > 0 ? (
+             <div className="flex items-center justify-between animate-in fade-in duration-500">
+                <div>
+                   <p className="font-black text-slate-800 dark:text-slate-100 text-lg">{formatter.format(myBills[myBills.length-1].amount + (myBills[myBills.length-1].penaltyAmount || 0))}</p>
+                   <p className="text-slate-400 text-[10px] font-bold">Periode: {myBills[myBills.length-1].month}/{myBills[myBills.length-1].year}</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                   myBills[myBills.length-1].status === BillStatus.PAID ? 'bg-emerald-100 text-emerald-700' : 
+                   myBills[myBills.length-1].status === BillStatus.PENDING ? 'bg-amber-100 text-amber-700 animate-pulse' :
+                   'bg-rose-100 text-rose-700'
+                }`}>
+                   {myBills[myBills.length-1].status}
+                </span>
              </div>
-             <p className="font-black text-slate-800 dark:text-slate-200">Paket Saya</p>
-             <p className="text-[10px] text-slate-400">Upgrade & Cek Detail</p>
-          </button>
-          <button onClick={() => setView('profile')} className="bg-white dark:bg-slate-900 p-5 rounded-3xl border dark:border-slate-800 shadow-sm hover:border-indigo-200 transition-all group text-left">
-             <div className="w-10 h-10 bg-blue-50 dark:bg-slate-800 text-blue-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-             </div>
-             <p className="font-black text-slate-800 dark:text-slate-200">Akun</p>
-             <p className="text-[10px] text-slate-400">Data Diri & Password</p>
-          </button>
+          ) : (
+             <p className="text-center text-slate-400 text-xs py-4 italic">Belum ada riwayat pembayaran.</p>
+          )}
        </div>
     </div>
   );
 
   const renderHistory = () => (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 pb-32">
-       <Header title="Riwayat Tagihan" showBack />
-       <div className="p-4 space-y-4">
-         {myBills.length > 0 ? myBills.slice().reverse().map((b, i) => (
-            <div key={b.id} className="bg-white dark:bg-slate-900 p-5 rounded-3xl border dark:border-slate-800 shadow-sm flex items-center justify-between group active:scale-[0.98] transition-all" style={{ animationDelay: `${i * 50}ms` }}>
-               <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black shrink-0 ${
-                     b.status === BillStatus.PAID ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 
-                     b.status === BillStatus.PENDING ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600' : 
-                     'bg-rose-100 dark:bg-rose-900/30 text-rose-600'
-                  }`}>
-                     {b.month}
-                  </div>
-                  <div>
-                     <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">Bulan {b.month}/{b.year}</p>
-                     <p className="text-xs text-slate-400 font-mono mt-0.5">#{b.id}</p>
-                     <p className={`text-[10px] font-black uppercase mt-1 ${
-                        b.status === BillStatus.PAID ? 'text-emerald-500' : 
-                        b.status === BillStatus.PENDING ? 'text-amber-500' : 
-                        'text-rose-500'
-                     }`}>
-                        {b.status === BillStatus.PAID ? 'Lunas' : b.status === BillStatus.PENDING ? 'Menunggu Konfirmasi' : 'Belum Bayar'}
-                     </p>
-                  </div>
-               </div>
-               <div className="text-right">
-                  <p className="font-black text-indigo-600 dark:text-indigo-400 text-sm">{formatter.format(b.amount + (b.penaltyAmount || 0))}</p>
-                  {b.status === BillStatus.UNPAID && (
-                     <button 
-                        onClick={() => { setPayingBill(b); setView('payment'); }}
-                        className="mt-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-1.5 rounded-xl text-[10px] font-bold shadow-lg shadow-slate-200 dark:shadow-none"
-                     >
-                        BAYAR
-                     </button>
-                  )}
-               </div>
-            </div>
-         )) : (
-            <div className="text-center py-20 opacity-50">
-               <svg className="w-20 h-20 mx-auto text-slate-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-               <p className="text-slate-500 font-medium">Belum ada riwayat tagihan.</p>
-            </div>
-         )}
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+       <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Riwayat Tagihan</h3>
+          {isSyncing && <span className="text-[10px] font-black text-indigo-500 animate-pulse">Syncing...</span>}
        </div>
+       {myBills.length > 0 ? myBills.slice().reverse().map(b => (
+          <div key={b.id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border dark:border-slate-800 shadow-sm flex items-center justify-between hover:border-indigo-200 transition-all active:scale-95">
+             <div>
+                <p className="font-black text-slate-800 dark:text-slate-100 text-sm">{formatter.format(b.amount + (b.penaltyAmount || 0))}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">{b.month}/{b.year} <span className="text-indigo-600 mx-1">•</span> ID: #{b.id.substring(0,6).toUpperCase()}</p>
+             </div>
+             <div className="text-right flex flex-col items-end gap-2">
+                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                   b.status === BillStatus.PAID ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 
+                   b.status === BillStatus.PENDING ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 animate-pulse' :
+                   'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400'
+                }`}>
+                   {b.status === BillStatus.PENDING ? 'MENUNGGU' : b.status}
+                </span>
+                {b.status === BillStatus.UNPAID && (
+                   <button onClick={() => { setPayingBill(b); setView('payment'); }} className="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md active:scale-90 transition-transform">
+                      BAYAR
+                   </button>
+                )}
+             </div>
+          </div>
+       )) : (
+          <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 opacity-50">
+             <p className="font-bold text-slate-400 text-sm">Tidak ditemukan data tagihan.</p>
+          </div>
+       )}
     </div>
   );
 
   const renderPayment = () => {
     if (!payingBill) return null;
-    
     const handleConfirmPayment = () => {
        const selectedAccount = paymentAccounts.find(a => a.id === selectedAccountId);
        if (!selectedAccount) return;
-       
-       alert(`Konfirmasi Pembayaran via ${selectedAccount.providerName} Berhasil Dikirim!`);
        onPaymentSuccess(payingBill.id, `${selectedAccount.type} - ${selectedAccount.providerName}`);
-       setPayingBill(null);
-       setSelectedAccountId(null);
-       setView('history');
-    };
-
-    const getProviderTheme = (name: string) => {
-      const lower = name.toLowerCase();
-      if (lower.includes('bca')) return 'bg-blue-600';
-      if (lower.includes('ovo')) return 'bg-purple-700';
-      if (lower.includes('dana')) return 'bg-sky-500';
-      if (lower.includes('gopay')) return 'bg-emerald-500';
-      if (lower.includes('shopeepay')) return 'bg-orange-600';
-      return 'bg-indigo-600';
+       setPayingBill(null); setSelectedAccountId(null); setView('history');
     };
 
     return (
-       <div className="animate-in fade-in slide-in-from-bottom-8 duration-300 pb-32">
-          <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl border-b dark:border-slate-800 p-4 flex items-center gap-3">
-             <button onClick={() => setView('history')} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
+       <div className="animate-in fade-in zoom-in duration-300 pb-20">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-xl relative">
+             <button onClick={() => setView('history')} className="absolute top-5 left-5 text-slate-400 hover:text-indigo-600 p-2">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
              </button>
-             <h2 className="text-lg font-black">Pembayaran</h2>
-          </div>
+             <div className="text-center pt-8">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Pembayaran</p>
+                <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400 mb-6">{formatter.format(payingBill.amount + (payingBill.penaltyAmount || 0))}</h3>
+                
+                <div className="space-y-4 text-left">
+                   {paymentAccounts.length > 0 ? (
+                       <div className="space-y-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Metode Transfer Manual</p>
+                            {paymentAccounts.map(acc => (
+                                <button key={acc.id} onClick={() => setSelectedAccountId(acc.id)} className={`w-full p-4 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-95 ${selectedAccountId === acc.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-50 dark:border-slate-800'}`}>
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-black text-[9px] text-white`}>
+                                        {acc.providerName.substring(0, 3).toUpperCase()}
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-black text-slate-800 dark:text-slate-100 text-xs">{acc.providerName}</p>
+                                        <p className="text-[9px] text-slate-400 uppercase font-bold">{acc.type}</p>
+                                    </div>
+                                </div>
+                                {selectedAccountId === acc.id && <div className="w-4 h-4 bg-indigo-600 rounded-full flex items-center justify-center text-white animate-in zoom-in"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg></div>}
+                                </button>
+                            ))}
+                       </div>
+                   ) : (
+                       <p className="text-center text-sm text-slate-400 py-4">Metode pembayaran manual tidak tersedia.</p>
+                   )}
+                </div>
 
-          <div className="p-4 space-y-6">
-             <div className="text-center py-6">
-                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">Total yang harus dibayar</p>
-                <h1 className="text-4xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{formatter.format(payingBill.amount)}</h1>
-                <div className="inline-block mt-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-[10px] font-mono text-slate-500">
-                   ID TAGIHAN: {payingBill.id}
+                {selectedAccountId && (
+                   <div className="mt-6 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-2xl p-4 animate-in slide-in-from-top-4 text-left shadow-inner">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nomor Rekening Tujuan</p>
+                       <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <p className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-wider">
+                                {paymentAccounts.find(a => a.id === selectedAccountId)?.accountNumber}
+                            </p>
+                            <button onClick={() => { navigator.clipboard.writeText(paymentAccounts.find(a => a.id === selectedAccountId)?.accountNumber || ''); alert('Nomor Rekening Disalin!'); }} className="bg-indigo-600 text-white px-3 py-1.5 rounded text-[10px] font-black active:scale-90 transition-transform">SALIN</button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase italic">A.N. {paymentAccounts.find(a => a.id === selectedAccountId)?.accountHolder}</p>
+                   </div>
+                )}
+
+                <div className="mt-8">
+                   <button disabled={!selectedAccountId} onClick={handleConfirmPayment} className={`w-full py-4 rounded-xl font-black shadow-lg transition-all text-sm ${selectedAccountId ? 'bg-indigo-600 text-white shadow-indigo-200 dark:shadow-none active:scale-95' : 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed'}`}>
+                      SAYA SUDAH TRANSFER
+                   </button>
                 </div>
              </div>
-
-             <div>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 mb-4 px-2">Pilih Metode Transfer</h3>
-                <div className="grid grid-cols-1 gap-3">
-                   {paymentAccounts.map(acc => (
-                      <div 
-                         key={acc.id}
-                         onClick={() => setSelectedAccountId(acc.id)}
-                         className={`relative overflow-hidden p-4 rounded-2xl border-2 transition-all cursor-pointer ${selectedAccountId === acc.id ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 shadow-lg shadow-indigo-100 dark:shadow-none scale-[1.02]' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900'}`}
-                      >
-                         <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-[10px] font-black shadow-md ${getProviderTheme(acc.providerName)}`}>
-                               {acc.providerName.substring(0,4)}
-                            </div>
-                            <div className="flex-1">
-                               <p className="font-bold text-slate-800 dark:text-slate-200">{acc.providerName}</p>
-                               <p className="text-xs text-slate-400 font-medium">{acc.type}</p>
-                            </div>
-                            {selectedAccountId === acc.id && (
-                               <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-white">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
-                               </div>
-                            )}
-                         </div>
-                      </div>
-                   ))}
-                </div>
-             </div>
-
-             {selectedAccountId && (
-                <div className="bg-slate-50 dark:bg-slate-900 rounded-3xl p-6 border dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4">
-                   <div className="flex justify-between items-center mb-1">
-                      <p className="text-xs font-bold text-slate-400 uppercase">Nomor Tujuan</p>
-                      {copiedText && <span className="text-xs font-bold text-emerald-500 animate-pulse">Berhasil Disalin!</span>}
-                   </div>
-                   <div className="flex items-center gap-3">
-                      <p className="text-2xl font-mono font-black text-slate-800 dark:text-slate-100 tracking-wider truncate">
-                         {paymentAccounts.find(a => a.id === selectedAccountId)?.accountNumber}
-                      </p>
-                      <button 
-                         onClick={() => handleCopy(paymentAccounts.find(a => a.id === selectedAccountId)?.accountNumber || '')}
-                         className="p-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border dark:border-slate-700 text-slate-500 hover:text-indigo-600 active:scale-90 transition-transform"
-                      >
-                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                      </button>
-                   </div>
-                   <p className="text-xs text-slate-500 font-bold mt-2">A.N. {paymentAccounts.find(a => a.id === selectedAccountId)?.accountHolder}</p>
-                </div>
-             )}
-          </div>
-
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border-t dark:border-slate-800 max-w-xl mx-auto z-40">
-             <button 
-                disabled={!selectedAccountId}
-                onClick={handleConfirmPayment}
-                className={`w-full py-4 rounded-2xl font-black text-sm shadow-xl transition-all ${selectedAccountId ? 'bg-indigo-600 text-white shadow-indigo-300 dark:shadow-none active:scale-95' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'}`}
-             >
-                KONFIRMASI SUDAH TRANSFER
-             </button>
           </div>
        </div>
     );
   };
 
   const renderPackage = () => (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 pb-32">
-       <Header title="Paket Internet" showBack />
-       <div className="p-4 space-y-4">
-          {packages.map(pkg => {
-             const isCurrent = pkg.id === customer.packageId;
-             return (
-                <div key={pkg.id} className={`p-6 rounded-[2rem] border-2 transition-all relative overflow-hidden ${isCurrent ? 'border-indigo-600 bg-indigo-600 text-white shadow-xl shadow-indigo-200 dark:shadow-none' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100'}`}>
-                   {isCurrent && (
-                      <div className="absolute top-0 right-0 bg-white/20 text-white text-[10px] font-black px-3 py-1 rounded-bl-2xl">
-                         PAKET SAAT INI
-                      </div>
-                   )}
-                   <div className="flex justify-between items-end mb-4">
-                      <div>
-                         <h3 className={`text-lg font-black ${isCurrent ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>{pkg.name}</h3>
-                         <p className={`text-3xl font-black ${isCurrent ? 'text-indigo-200' : 'text-indigo-600 dark:text-indigo-400'}`}>{pkg.speed}</p>
-                      </div>
-                   </div>
-                   <p className={`text-xs leading-relaxed mb-6 ${isCurrent ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                      {pkg.description}
-                   </p>
-                   <div className="flex items-center justify-between">
-                      <p className={`font-bold ${isCurrent ? 'text-white' : 'text-slate-800 dark:text-slate-200'}`}>{formatter.format(pkg.price)} <span className="text-[10px] opacity-70">/bulan</span></p>
-                      {!isCurrent && (
-                         <button onClick={() => handleRequestChange(pkg)} className="bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-xl text-xs font-black hover:bg-indigo-100 transition-colors">
-                            PILIH
-                         </button>
-                      )}
-                   </div>
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Daftar Paket</h3>
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        {packages.map(pkg => {
+          const isCurrent = pkg.id === customer?.packageId;
+          return (
+            <div key={pkg.id} className={`p-5 rounded-[1.5rem] border-2 transition-all active:scale-[0.98] ${isCurrent ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20' : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'}`}>
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h4 className="font-black text-slate-800 dark:text-slate-100 text-base">{pkg.name}</h4>
+                  <p className="text-indigo-600 dark:text-indigo-400 font-black text-xl">{pkg.speed}</p>
                 </div>
-             );
-          })}
-       </div>
+                {isCurrent && <span className="bg-emerald-500 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-widest shadow-md">SEDANG AKTIF</span>}
+              </div>
+              <p className="text-slate-500 dark:text-slate-400 text-xs mb-4 leading-relaxed">{pkg.description}</p>
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+                <p className="font-black text-slate-800 dark:text-slate-100 text-sm">{formatter.format(pkg.price)}<span className="text-[10px] text-slate-400 font-bold">/bln</span></p>
+                {!isCurrent && <button onClick={() => handleRequestChange(pkg)} className="bg-indigo-600 text-white text-[10px] font-black px-4 py-2 rounded-lg shadow-md active:scale-90 transition-transform">GANTI KE PAKET INI</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
   const renderProfile = () => (
-    <div className="animate-in fade-in slide-in-from-right-4 duration-300 pb-32">
-       <Header title="Profil Saya" showBack />
-       <div className="p-4 space-y-6">
-          <div className="text-center py-4">
-             <div className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-[2rem] mx-auto flex items-center justify-center text-4xl font-black text-white shadow-xl shadow-indigo-200 dark:shadow-none mb-4">
-                {customer.name.charAt(0)}
-             </div>
-             <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">{customer.name}</h2>
-             <p className="text-slate-500 dark:text-slate-400 font-medium">{customer.phone}</p>
-          </div>
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Akun & Keamanan</h3>
+      </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border dark:border-slate-800 shadow-sm">
-             <h3 className="font-black text-slate-800 dark:text-slate-100 mb-4">Alamat Pemasangan</h3>
-             <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl">
-                {customer.address}
-             </p>
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm">
+        <h4 className="font-black text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2 text-sm">
+          <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          Ubah Password Login
+        </h4>
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          {customer.password && (
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 px-1">Password Lama</label>
+              <input required type="password" value={oldPasswordInput} onChange={e => setOldPasswordInput(e.target.value)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 text-sm" placeholder="••••••••" />
+            </div>
+          )}
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 px-1">Password Baru</label>
+            <input required type="password" value={newPasswordInput} onChange={e => setNewPasswordInput(e.target.value)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 text-sm" placeholder="Minimal 6 karakter" />
           </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] p-6 border dark:border-slate-800 shadow-sm">
-             <h3 className="font-black text-slate-800 dark:text-slate-100 mb-4">Ganti Password</h3>
-             <form onSubmit={handleChangePassword} className="space-y-4">
-               {customer.password && (
-                 <input 
-                   type="password"
-                   value={oldPasswordInput}
-                   onChange={e => setOldPasswordInput(e.target.value)}
-                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl focus:ring-2 focus:ring-indigo-500 text-sm font-bold placeholder:font-normal"
-                   placeholder="Password Lama"
-                 />
-               )}
-               <input 
-                 type="password"
-                 value={newPasswordInput}
-                 onChange={e => setNewPasswordInput(e.target.value)}
-                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl focus:ring-2 focus:ring-indigo-500 text-sm font-bold placeholder:font-normal"
-                 placeholder="Password Baru"
-               />
-               <input 
-                 type="password"
-                 value={confirmPasswordInput}
-                 onChange={e => setConfirmPasswordInput(e.target.value)}
-                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-2xl focus:ring-2 focus:ring-indigo-500 text-sm font-bold placeholder:font-normal"
-                 placeholder="Konfirmasi Password Baru"
-               />
-               <button type="submit" className="w-full bg-slate-900 dark:bg-slate-700 text-white py-4 rounded-2xl font-black shadow-lg hover:bg-slate-800 transition-all active:scale-95">
-                 SIMPAN PASSWORD
-               </button>
-             </form>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1 px-1">Konfirmasi Password Baru</label>
+            <input required type="password" value={confirmPasswordInput} onChange={e => setConfirmPasswordInput(e.target.value)} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white border-none rounded-xl focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 text-sm" placeholder="Ulangi password baru" />
           </div>
-
-          <button onClick={onLogout} className="w-full py-4 text-rose-500 font-black text-sm hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-2xl transition-colors">
-             KELUAR DARI APLIKASI
+          <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-black shadow-lg shadow-indigo-100 dark:shadow-none transition-all active:scale-95 text-sm mt-2">
+            SIMPAN PERUBAHAN
           </button>
-       </div>
+        </form>
+      </div>
+
+      <div className="bg-slate-100 dark:bg-slate-900 border dark:border-slate-800 p-5 rounded-[1.5rem] flex flex-col gap-3">
+         <div className="flex justify-between items-center pb-2 border-b dark:border-slate-800">
+            <span className="text-slate-500 text-xs font-bold uppercase tracking-widest">Informasi Kontak</span>
+            <span className="text-indigo-600 font-black text-[10px] uppercase">Terverifikasi</span>
+         </div>
+         <div className="flex justify-between">
+            <span className="text-slate-400 text-xs font-bold">Nomor WhatsApp</span>
+            <span className="text-slate-800 dark:text-slate-200 text-xs font-black">{customer.phone}</span>
+         </div>
+         <div className="flex justify-between">
+            <span className="text-slate-400 text-xs font-bold">Alamat Terpasang</span>
+            <span className="text-slate-800 dark:text-slate-200 text-xs font-black text-right max-w-[180px] break-words">{customer.address}</span>
+         </div>
+      </div>
+      
+      <button onClick={onLogout} className="w-full py-4 border-2 border-rose-500/30 text-rose-500 rounded-xl font-black text-sm active:bg-rose-50 transition-colors mb-20">KELUAR DARI AKUN</button>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-inter text-slate-900 dark:text-slate-100">
-       <div className="max-w-xl mx-auto min-h-screen relative bg-slate-50 dark:bg-slate-950 shadow-2xl">
-          {view === 'home' && (
-             <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md px-6 py-4 flex justify-between items-center border-b border-slate-200/50 dark:border-slate-800/50">
-                <div className="flex items-center gap-2">
-                   <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-xs">W</div>
-                   <span className="font-black text-lg tracking-tight">WIFINET</span>
-                </div>
-                <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-800">
-                   <div className="w-full h-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center font-bold text-xs">
-                      {customer.name.charAt(0)}
-                   </div>
-                </div>
-             </div>
-          )}
-
-          <div className="p-4">
-            {view === 'home' && renderHome()}
-            {view === 'history' && renderHistory()}
-            {view === 'payment' && renderPayment()}
-            {view === 'package' && renderPackage()}
-            {view === 'profile' && renderProfile()}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-inter select-none">
+       <header className="bg-white dark:bg-slate-900 px-5 py-4 border-b dark:border-slate-800 flex items-center justify-between sticky top-0 z-40 shadow-sm transition-colors duration-300">
+          <div className="flex items-center gap-2">
+             <div className="w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-xs shadow-lg shadow-indigo-200 dark:shadow-none">W</div>
+             <span className="font-black text-slate-800 dark:text-slate-100 tracking-tighter text-sm">WIFINET PORTAL</span>
           </div>
-
-          {/* Floating Dock Navigation */}
-          {view !== 'payment' && (
-             <div className="fixed bottom-6 left-6 right-6 max-w-[calc(36rem-3rem)] mx-auto z-40">
-                <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 rounded-[2rem] shadow-2xl shadow-indigo-500/10 dark:shadow-none p-2 flex justify-between items-center">
-                   {[
-                      { id: 'home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', label: 'Home' },
-                      { id: 'package', icon: 'M13 10V3L4 14h7v7l9-11h-7z', label: 'Paket' },
-                      { id: 'history', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2', label: 'Tagihan' },
-                      { id: 'profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', label: 'Akun' },
-                   ].map((item) => (
-                      <button
-                         key={item.id}
-                         onClick={() => setView(item.id as PortalView)}
-                         className={`relative flex flex-col items-center justify-center w-full h-14 rounded-2xl transition-all duration-300 ${view === item.id ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                      >
-                         <svg className={`w-6 h-6 transition-transform duration-300 ${view === item.id ? '-translate-y-1' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={item.icon} />
-                         </svg>
-                         {view === item.id && (
-                            <span className="absolute bottom-2 w-1 h-1 bg-indigo-600 dark:bg-indigo-400 rounded-full animate-in zoom-in"></span>
-                         )}
-                      </button>
-                   ))}
-                </div>
+          <div className="flex items-center gap-3">
+             {isSyncing && <div className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></div>}
+             <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-white dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-black text-[10px]">
+               {customer.name.charAt(0)}
              </div>
-          )}
+          </div>
+       </header>
+
+       <div className="max-w-xl mx-auto p-4 pb-28">
+          {view === 'home' && renderHome()}
+          {view === 'history' && renderHistory()}
+          {view === 'payment' && renderPayment()}
+          {view === 'package' && renderPackage()}
+          {view === 'profile' && renderProfile()}
        </div>
+
+       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t dark:border-slate-800 px-6 py-3 flex justify-between z-40 max-w-xl mx-auto shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.1)] pb-safe-area">
+          {[
+            { id: 'home', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+            { id: 'package', label: 'Paket', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+            { id: 'history', label: 'Tagihan', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
+            { id: 'profile', label: 'Akun', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
+          ].map(item => (
+            <button key={item.id} onClick={() => setView(item.id as PortalView)} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all active:scale-90 ${view === item.id || (view === 'payment' && item.id === 'history') ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-300 dark:text-slate-600'}`}>
+               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon}/></svg>
+               <span className="text-[9px] font-black uppercase tracking-tight">{item.label}</span>
+            </button>
+          ))}
+       </nav>
     </div>
   );
 };
