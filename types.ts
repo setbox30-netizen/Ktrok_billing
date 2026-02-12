@@ -68,6 +68,8 @@ export interface AdminProfile {
   businessName: string;
   username: string;
   password?: string;
+  autoBillingEnabled?: boolean;
+  billingDay?: number;
 }
 
 export type PaymentType = 'BANK' | 'E-WALLET' | 'QRIS';
